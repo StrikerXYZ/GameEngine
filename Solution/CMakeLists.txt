@@ -17,4 +17,4 @@ set(CMAKE_CXX_COMPILER "C:/Program Files/Microsoft Visual Studio/2022/Community/
 project ("Solution")
 
 # Include sub-projects.
-add_subdirectory ("GameEngine")
+add_subdirectory ("Source")

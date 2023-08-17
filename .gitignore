@@ -33,7 +33,7 @@
 
 #Cache
 .vs/
-Solution/out/
+Build/
 
 #CMake
 CMakeLists.txt.user

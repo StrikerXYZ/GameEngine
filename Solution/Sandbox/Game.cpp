@@ -1,24 +1,13 @@
 ﻿// GameEngine.cpp : Defines the entry point for the application.
 //
 
-#include "GameEngine.h"
+#include "Game.h"
 
 #include <windows.h>
-#include <stdint.h>
+#include <xinput.h>
+#include <stdio.h>
 
-#define local_static static
-#define global_static static //variables cannot be used in other translation units and initialized to 0 by default
-#define internal_static static
-
-using u8 = uint8_t;
-using u16 = uint16_t;
-using u32 = uint32_t;
-using u64 = uint64_t;
-
-using i8 = int8_t;
-using i16 = int16_t;
-using i32 = int32_t;
-using i64 = int64_t;
+#include "Minimal.h"
 
 struct Win32BitmapBuffer
 {
@@ -158,25 +147,27 @@ LRESULT CALLBACK Win32WindowCallback(HWND Window, UINT Message, WPARAM WParam, L
 	return Result;
 }
 
-int CALLBACK WinMain( HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
+int Engine::Run(HINSTANCE Instance)
 {
-	MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
+	printf("test");
+
+	//MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
 
 	Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
 
-	WNDCLASS WindowClass = {}; 
+	WNDCLASS WindowClass = {};
 	WindowClass.style = CS_HREDRAW | CS_VREDRAW;
 	WindowClass.lpfnWndProc = Win32WindowCallback;
 	WindowClass.hInstance = Instance;
 	WindowClass.lpszClassName = "GameEngineClass";
-	
+
 	if (RegisterClass(&WindowClass))
 	{
 		HWND Window = CreateWindowEx(
 			0,
 			WindowClass.lpszClassName,
 			"Game Engine",
-			WS_OVERLAPPEDWINDOW|WS_VISIBLE,
+			WS_OVERLAPPEDWINDOW | WS_VISIBLE,
 			CW_USEDEFAULT,
 			CW_USEDEFAULT,
 			CW_USEDEFAULT,
@@ -207,6 +198,21 @@ int CALLBACK WinMain( HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandL
 					TranslateMessage(&Message);
 					DispatchMessage(&Message);
 				}
+
+				//for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
+				//{
+				//	XINPUT_STATE ControllerState;
+				//	if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+				//	{
+				//		XINPUT_GAMEPAD* Pad = &ControllerState.Gamepad;
+
+				//		//Pad->
+				//	}
+				//	else
+				//	{
+				//		//Note: controller not available
+				//	}
+				//}
 
 				RenderGradient(GlobalBackBuffer, XOffset, YOffset);
 

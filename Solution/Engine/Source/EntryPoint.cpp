@@ -1,18 +1,4 @@
-#pragma once
-
-#include "Definition.h"
-#include "Core.h"
-
-#if ENGINE_PLATFORM_WINDOWS
-
-#include <windows.h>
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
-	
-namespace Engine {
-	extern int Run(HINSTANCE Instance);
-}
+#include "EntryPoint.hpp"
 
 internal_static void SetupConsole()
 {
@@ -27,12 +13,20 @@ internal_static void SetupConsole()
 	setvbuf(stdin, NULL, _IONBF, 0);
 }
 
-int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
+internal_static void Launch(HINSTANCE Instance)
 {
 	SetupConsole();
+
+	Engine::Log::Init();
 
 	Engine::Run(Instance);
 }
 
-#endif // ENGINE_PLATFORM_WINDOWS
+#if ENGINE_PLATFORM_WINDOWS
 
+int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
+{
+	Launch(Instance);
+}
+
+#endif

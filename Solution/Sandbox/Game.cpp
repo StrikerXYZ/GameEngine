@@ -1,13 +1,11 @@
 ﻿// GameEngine.cpp : Defines the entry point for the application.
 //
 
-#include "Game.h"
-
 #include <windows.h>
 #include <xinput.h>
 #include <stdio.h>
 
-#include "Minimal.h"
+#include "Minimal.hpp"
 
 struct Win32BitmapBuffer
 {
@@ -150,6 +148,9 @@ LRESULT CALLBACK Win32WindowCallback(HWND Window, UINT Message, WPARAM WParam, L
 int Engine::Run(HINSTANCE Instance)
 {
 	printf("test");
+
+	Engine::Log::LogCore(Engine::Log::Level::Warn, "This is a warn!");
+	Engine::Log::Log(Engine::Log::Level::Info, "This is a client!");
 
 	//MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
 

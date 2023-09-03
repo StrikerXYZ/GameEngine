@@ -1,5 +1,13 @@
 #include "EntryPoint.hpp"
 
+#include "Definition.hpp"
+#include "Core.hpp"
+#include "Log.hpp"
+
+#include <stdio.h>
+#include <io.h>
+#include <fcntl.h>
+
 internal_static void SetupConsole()
 {
 	AllocConsole();

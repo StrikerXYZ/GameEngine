@@ -441,3 +441,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# git submodules
+Solution/Engine/External

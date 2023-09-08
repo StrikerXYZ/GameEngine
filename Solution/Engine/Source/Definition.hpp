@@ -1,6 +1,8 @@
 #pragma once
 
+#pragma warning (push, 0)
 #include <stdint.h>
+#pragma warning (pop)
 
 //define static types
 #define local_static static

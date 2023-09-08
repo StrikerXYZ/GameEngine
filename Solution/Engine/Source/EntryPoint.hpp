@@ -3,7 +3,9 @@
 
 #if ENGINE_PLATFORM_WINDOWS
 
-#include <windows.h>
+#pragma warning (push, 0)
+#include <Windows.h>
+#pragma warning (pop)
 	
 namespace Engine {
 	extern int Run(HINSTANCE Instance);

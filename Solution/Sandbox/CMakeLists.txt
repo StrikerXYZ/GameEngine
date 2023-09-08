@@ -6,8 +6,9 @@
 add_executable (Game WIN32 "Game.cpp" )
 
 target_link_libraries(Game PUBLIC
-user32.lib 
-gdi32.lib 
+#user32.lib 
+#gdi32.lib 
+Xinput.lib 
 Engine
 #"${CMAKE_CURRENT_SOURCE_DIR}/../Build/x64-debug/lib/Engine.lib"
 )

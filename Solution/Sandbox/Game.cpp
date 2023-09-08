@@ -1,11 +1,13 @@
 ﻿// GameEngine.cpp : Defines the entry point for the application.
 //
 
-#include <windows.h>
-#include <xinput.h>
-#include <stdio.h>
-
 #include "Minimal.hpp"
+
+#pragma warning (push, 0)
+#include <Windows.h>
+#include <Xinput.h>
+#include <stdio.h>
+#pragma warning (pop)
 
 struct Win32BitmapBuffer
 {
@@ -26,7 +28,7 @@ struct Win32WindowDimension
 	int Height;
 };
 
-Win32WindowDimension Win32GetWindowDimension(HWND Window)
+internal_static Win32WindowDimension Win32GetWindowDimension(HWND Window)
 {
 	Win32WindowDimension Result;
 
@@ -49,9 +51,9 @@ internal_static void RenderGradient(Win32BitmapBuffer Buffer, int XOffset, int Y
 		{
 			//Memory:		BB GG RR 00 - Little Endian
 			//Registers:	xx RR GG BB
-			u8 Blue = (X + XOffset);
-			u8 Green = (Y + YOffset);
-			*Pixel++ = ((Green << 8) | Blue);
+			u8 Blue = static_cast<u8>(X + XOffset);
+			u8 Green = static_cast<u8>(Y + YOffset);
+			*Pixel++ = static_cast<u32>((Green << 8) | Blue);
 		}
 
 		Row += Buffer.Pitch;
@@ -77,8 +79,8 @@ internal_static void Win32ResizeDIBSection(Win32BitmapBuffer* Buffer, int Width,
 	Buffer->Info.bmiHeader.biBitCount = 32;
 	Buffer->Info.bmiHeader.biCompression = BI_RGB;
 
-	int BitmapMemorySize = Buffer->Width * Buffer->Height * Buffer->BytesPerPixel;
-	Buffer->Memory = VirtualAlloc(0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+	u64 BitmapMemorySize = static_cast<u64>(Buffer->Width * Buffer->Height * Buffer->BytesPerPixel);
+	Buffer->Memory = VirtualAlloc(nullptr, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
 
 	//todo:clear this to black
 	Buffer->Pitch = Width * Buffer->BytesPerPixel;
@@ -127,6 +129,65 @@ LRESULT CALLBACK Win32WindowCallback(HWND Window, UINT Message, WPARAM WParam, L
 			OutputDebugString("WM_ACTIVATEAPP\n");
 		} break;
 
+		case WM_SYSKEYDOWN:
+		case WM_SYSKEYUP:
+		case WM_KEYDOWN:
+		case WM_KEYUP:
+		{
+			u32 VKCode = WParam;
+			bool WasDown = ((LParam & (1 << 30)) != 0);
+			bool IsDown = ((LParam & (1 << 31)) != 0);
+
+			if (VKCode == 'W')
+			{
+
+			}
+			else if (VKCode == 'A')
+			{
+
+			}
+			else if (VKCode == 'S')
+			{
+
+			}
+			else if (VKCode == 'D')
+			{
+
+			}
+			else if (VKCode == 'Q')
+			{
+
+			}
+			else if (VKCode == 'E')
+			{
+
+			}
+			else if (VKCode == VK_UP)
+			{
+
+			}
+			else if (VKCode == VK_DOWN)
+			{
+
+			}
+			else if (VKCode == VK_LEFT)
+			{
+
+			}
+			else if (VKCode == VK_RIGHT)
+			{
+
+			}
+			else if (VKCode == VK_ESCAPE)
+			{
+
+			}
+			else if (VKCode == VK_SPACE)
+			{
+
+			}
+		} break;
+
 		case WM_PAINT:
 		{
 			PAINTSTRUCT Paint;
@@ -173,10 +234,10 @@ int Engine::Run(HINSTANCE Instance)
 			CW_USEDEFAULT,
 			CW_USEDEFAULT,
 			CW_USEDEFAULT,
-			0,
-			0,
+			nullptr,
+			nullptr,
 			Instance,
-			0
+			nullptr
 		);
 
 		if (Window)
@@ -189,7 +250,7 @@ int Engine::Run(HINSTANCE Instance)
 			GlobalRunning = true;
 			while (GlobalRunning)
 			{
-				while (PeekMessageA(&Message, 0, 0, 0, PM_REMOVE))
+				while (PeekMessageA(&Message, nullptr, 0, 0, PM_REMOVE))
 				{
 					if (Message.message == WM_QUIT)
 					{
@@ -200,20 +261,49 @@ int Engine::Run(HINSTANCE Instance)
 					DispatchMessage(&Message);
 				}
 
-				//for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
-				//{
-				//	XINPUT_STATE ControllerState;
-				//	if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
-				//	{
-				//		XINPUT_GAMEPAD* Pad = &ControllerState.Gamepad;
+				for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
+				{
+					XINPUT_STATE ControllerState;
+					if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+					{
+						XINPUT_GAMEPAD* Pad = &ControllerState.Gamepad;
 
-				//		//Pad->
-				//	}
-				//	else
-				//	{
-				//		//Note: controller not available
-				//	}
-				//}
+						bool Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+						bool Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+						bool Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+						bool Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+						bool Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+						bool Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+						bool LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
+						bool RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
+						bool AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
+						bool BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
+						bool XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
+						bool YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
+
+						i16 StickX = Pad->sThumbLX;
+						i16 StickY = Pad->sThumbLY;
+
+						if (AButton)
+						{
+							++XOffset;
+						}
+						if (BButton)
+						{
+							++YOffset;
+						}
+					}
+					else
+					{
+						//Note: controller not available
+					}
+				}
+
+				//Rumble
+				/*XINPUT_VIBRATION Vibration;
+				Vibration.wLeftMotorSpeed = 60000;
+				Vibration.wRightMotorSpeed = 60000;
+				XInputSetState(0, &Vibration);*/
 
 				RenderGradient(GlobalBackBuffer, XOffset, YOffset);
 
@@ -224,8 +314,6 @@ int Engine::Run(HINSTANCE Instance)
 				Win32DisplayBufferInWindow(DeviceContext, GlobalBackBuffer, Dimension.Width, Dimension.Height);
 
 				ReleaseDC(Window, DeviceContext);
-
-				++XOffset;
 			}
 		}
 		else

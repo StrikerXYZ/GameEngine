@@ -4,40 +4,87 @@
 #include "Core.hpp"
 #include "Log.hpp"
 
-#pragma warning (push, 0)
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
-#pragma warning (pop)
 
-internal_static void SetupConsole()
+internal_static void GameOutputSound(const Engine::GameSoundBuffer& buffer, u32 tone_frequency)
 {
-	AllocConsole();
-	SetConsoleTitleA("Engine Console");
-	typedef struct { char* _ptr; int _cnt; char* _base; int _flag; int _file; int _charbuf; int _bufsiz; char* _tmpfname; } FILE_COMPLETE;
-	*reinterpret_cast<FILE_COMPLETE*>(stdout) = *reinterpret_cast<FILE_COMPLETE*>(_fdopen(_open_osfhandle(reinterpret_cast<i64>(GetStdHandle(STD_OUTPUT_HANDLE)), _O_TEXT), "w"));
-	*reinterpret_cast<FILE_COMPLETE*>(stderr) = *reinterpret_cast<FILE_COMPLETE*>(_fdopen(_open_osfhandle(reinterpret_cast<i64>(GetStdHandle(STD_ERROR_HANDLE)), _O_TEXT), "w"));
-	*reinterpret_cast<FILE_COMPLETE*>(stdin) = *reinterpret_cast<FILE_COMPLETE*>(_fdopen(_open_osfhandle(reinterpret_cast<i64>(GetStdHandle(STD_INPUT_HANDLE)), _O_TEXT), "r"));
-	setvbuf(stdout, nullptr, _IONBF, 0);
-	setvbuf(stderr, nullptr, _IONBF, 0);
-	setvbuf(stdin, nullptr, _IONBF, 0);
+	local_static f32 t_sine;
+	i16 tone_volume = 1;
+	f32 wave_period = static_cast<f32>(buffer.samples_per_second / tone_frequency);
+	f32 PI = 3.14159265f;
+	
+	f32* sample_out = buffer.samples;
+	for (u32 i = 0; i < buffer.sample_count; ++i)
+	{
+		f32 sine_value = sinf(t_sine);
+		f32 sample_value = sine_value * tone_volume;
+		*sample_out++ = sample_value;
+		*sample_out++ = sample_value;
+
+		t_sine += 2.f * PI * 1.f / wave_period;
+	}
 }
 
-internal_static void Launch(HINSTANCE Instance)
+internal_static void RenderGradient(const Engine::GameOffscreenBuffer& bitmap_buffer, i32 x_offset, i32 y_offset)
 {
-	SetupConsole();
+	//todo: test buffer pass by value performance
+	u8* row = static_cast<u8*>(bitmap_buffer.memory);
+	for (int y = 0; y < bitmap_buffer.height; ++y)
+	{
+		u32* pixel = reinterpret_cast<u32*>(row);
+		for (int x = 0; x < bitmap_buffer.width; ++x)
+		{
+			//Memory:		BB GG RR 00 - Little Endian
+			//Registers:	xx RR GG BB
+			u8 blue = static_cast<u8>(x + x_offset);
+			u8 green = static_cast<u8>(y + y_offset);
+			*pixel++ = static_cast<u32>((green << 8) | blue);
+		}
 
+		row += bitmap_buffer.pitch;
+	}
+}
+
+void Engine::PlatformLaunch()
+{
 	Engine::Log::Init();
-
-	Engine::Run(Instance);
 }
 
-#if ENGINE_PLATFORM_WINDOWS
-
-int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance, [[maybe_unused]] LPSTR CommandLine, [[maybe_unused]] int ShowCode)
+void Engine::PlatformLoop(Engine::GameMemory* memory, const Engine::GameInput* input, const Engine::GameOffscreenBuffer& buffer, const Engine::GameSoundBuffer& sound_buffer)
 {
+	GameState* game_state = reinterpret_cast<GameState*>(memory->permanent_storage);
+	if (!memory->is_initialized)
+	{
+		Engine::FileResult bitmap_memory = PlatformRead(__FILE__);
+		if (bitmap_memory.content)
+		{
+			PlatformFree(bitmap_memory);
+		}
 
-	Launch(Instance);
+
+		i32 tone_frequency = 256;
+		memory->is_initialized = true;
+	}
+
+	const Engine::GameControllerInput& Input0 = input->controllers[0];
+	{
+		if (Input0.is_analog)
+		{
+			game_state->tone_frequency = 256 + static_cast<u32>(128 * Input0.end_x);
+			game_state->x_offset += static_cast<i32>(4.f * Input0.end_y);
+		}
+		else
+		{
+
+		}
+
+		if (Input0.down.is_ended_down)
+		{
+			game_state->y_offset += 1;
+		}
+	}
+
+	GameOutputSound(sound_buffer, game_state->tone_frequency);
+	RenderGradient(buffer, game_state->x_offset, game_state->y_offset);
+
+	App::Run();
 }
-
-#endif

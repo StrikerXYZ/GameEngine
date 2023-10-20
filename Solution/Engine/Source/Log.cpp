@@ -1,6 +1,5 @@
 #include "Log.hpp"
 
-#include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace Engine

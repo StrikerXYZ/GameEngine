@@ -3,7 +3,17 @@
 #include "Definition.hpp"
 #include "Core.hpp"
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
+#pragma clang diagnostic ignored "-Wreserved-identifier"
+#pragma clang diagnostic ignored "-Wswitch-enum"
+#pragma clang diagnostic ignored "-Wfloat-equal"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
+#pragma clang diagnostic ignored "-Wc++20-compat"
+#pragma clang diagnostic ignored "-Wundefined-func-template"
 #include <spdlog/spdlog.h>
+#pragma clang diagnostic pop
 
 namespace spdlog
 {

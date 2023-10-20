@@ -34,6 +34,13 @@ add_compile_options(
 	-Wno-covered-switch-default
 	-Wno-missing-prototypes
 	-Wno-global-constructors
+	-Wno-unused-variable
+	-Wno-unused-parameter
+	-Wno-extra-semi-stmt
+	-Wno-writable-strings
+	-Wno-unused-function
+	-Wno-unused-template
+	-WX
 )
 
 # Include sub-projects.

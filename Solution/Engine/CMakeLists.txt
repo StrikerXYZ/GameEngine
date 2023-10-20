@@ -3,14 +3,19 @@
 #
 
 # Add source to this project's executable.
-add_library (Engine STATIC "Minimal.hpp" "Source/Core.hpp" "Source/EntryPoint.hpp" "Source/Definition.hpp" "Source/Log.cpp" "Source/Log.hpp" "Source/EntryPoint.cpp")
+add_library (Engine STATIC "Minimal.hpp" "Source/Core.hpp" "Source/EntryPoint.hpp" "Source/Definition.hpp" "Source/Log.cpp" "Source/Log.hpp" "Source/EntryPoint.cpp" "Source/Platform/PlatformWindows.cpp")
 
-#target_include_directories(Engine PUBLIC 
-#${CMAKE_CURRENT_LIST_DIR}
-#)
+target_include_directories(Engine PRIVATE
+"${CMAKE_CURRENT_LIST_DIR}"
+)
 
 add_subdirectory("External/SpdLog")
 target_link_libraries(Engine spdlog::spdlog_header_only)
+
+set_target_properties(Engine PROPERTIES
+    UNITY_BUILD_MODE BATCH
+    UNITY_BUILD_BATCH_SIZE 10
+)
 
 if (WIN32)
     target_compile_definitions(Engine PUBLIC   

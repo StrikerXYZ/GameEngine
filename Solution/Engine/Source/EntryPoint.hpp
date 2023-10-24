@@ -27,32 +27,38 @@ namespace Engine {
 
 	struct GameControllerInput
 	{
+		b32 is_connected;
 		b32 is_analog;
 
-		f32 start_x;
-		f32 start_y;
+		f32 stick_average_x;
+		f32 stick_average_y;
 
-		f32 min_x;
-		f32 min_y;
+		GameButtonState move_up;
+		GameButtonState move_down;
+		GameButtonState move_left;
+		GameButtonState move_right;
 
-		f32 max_x;
-		f32 max_y;
+		GameButtonState action_up;
+		GameButtonState action_down;
+		GameButtonState action_left;
+		GameButtonState action_right;
 
-		f32 end_x;
-		f32 end_y;
+		GameButtonState shoulder_left;
+		GameButtonState shoulder_right;
 
-		GameButtonState up;
-		GameButtonState down;
-		GameButtonState left;
-		GameButtonState right;
-		GameButtonState left_shoulder;
-		GameButtonState right_shoulder;
+		GameButtonState start;
+		GameButtonState back;
 	};
 
 	struct GameInput
 	{
-		GameControllerInput controllers[4];
+		GameControllerInput controllers[5];
 	};
+	inline GameControllerInput& get_controller(GameInput& input, u64 controller_index)
+	{
+		Assert(controller_index < ArrayCount(input.controllers))
+		return input.controllers[controller_index];
+	}
 
 	struct GameState
 	{

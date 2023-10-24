@@ -5,6 +5,11 @@
 # Add source to this project's executable.
 add_executable (Game WIN32 "Game.cpp" )
 
+target_link_options(Game
+  PUBLIC
+    LINKER:-Map=Game.map
+)
+
 target_link_libraries(Game PUBLIC
 #user32.lib 
 #gdi32.lib 

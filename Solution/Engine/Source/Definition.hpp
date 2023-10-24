@@ -44,9 +44,11 @@ internal_static u32 SafeTruncate32(i64 value)
 }
 
 template<typename T>
-internal_static void Swap(T a, T b)
+internal_static void Swap(T& a, T& b)
 {
 	const T temp = a;
 	a = b;
 	b = temp;
 }
+
+#define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))

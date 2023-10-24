@@ -25,13 +25,13 @@ if (WIN32)
 endif() 
 
 target_compile_definitions(Engine PUBLIC
-    $<$<CONFIG:Debug>:ENGINE_BUILD_DEBUG>
-    $<$<CONFIG:Release>:ENGINE_BUILD_RELEASE>
-)
 
-#if (CMAKE_VERSION VERSION_GREATER 3.12)
- # set_property(TARGET Engine PROPERTY CXX_STANDARD 20)
-#endif()
+    $<$<CONFIG:Debug>:ENGINE_BUILD_DEBUG=1>
+    $<$<CONFIG:Debug>:ENGINE_BUILD_RELEASE=0>
+
+    $<$<CONFIG:Release>:ENGINE_BUILD_DEBUG=0>
+    $<$<CONFIG:Release>:ENGINE_BUILD_RELEASE=1>
+)
 
 
 

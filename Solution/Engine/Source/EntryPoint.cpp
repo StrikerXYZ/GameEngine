@@ -65,21 +65,24 @@ void Engine::PlatformLoop(Engine::GameMemory* memory, const Engine::GameInput* i
 		memory->is_initialized = true;
 	}
 
-	const Engine::GameControllerInput& Input0 = input->controllers[0];
+	for (u64 controller_index = 0; controller_index < ArrayCount(input->controllers); ++controller_index)
 	{
-		if (Input0.is_analog)
+		const Engine::GameControllerInput& controller = input->controllers[controller_index];
 		{
-			game_state->tone_frequency = 256 + static_cast<u32>(128 * Input0.end_x);
-			game_state->x_offset += static_cast<i32>(4.f * Input0.end_y);
-		}
-		else
-		{
+			if (controller.is_analog)
+			{
+				game_state->tone_frequency = 256 + static_cast<u32>(128 * controller.stick_average_x);
+				game_state->x_offset += static_cast<i32>(4.f * controller.stick_average_y);
+			}
+			else
+			{
+				game_state->x_offset += static_cast<i32>(controller.move_right.is_ended_down) - static_cast<i32>(controller.move_left.is_ended_down);
+			}
 
-		}
-
-		if (Input0.down.is_ended_down)
-		{
-			game_state->y_offset += 1;
+			if (controller.action_down.is_ended_down)
+			{
+				game_state->y_offset += 1;
+			}
 		}
 	}
 

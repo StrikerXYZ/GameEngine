@@ -23,9 +23,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_CXX_FLAGS_DEBUG "-Og")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MAP /opt:ref")
+
 add_compile_options(
-	$<$<CONFIG:DEBUG>:-Og>
-	$<$<CONFIG:RELEASE>:-O3>
 	-Weverything
 	-Wno-c++98-compat
 	-Wno-c++98-compat-pedantic
@@ -40,7 +43,12 @@ add_compile_options(
 	-Wno-writable-strings
 	-Wno-unused-function
 	-Wno-unused-template
+	-Wno-undef
+	-Wno-unused-command-line-argument
 	-WX
+	-Oi				#intrinsic optimizations
+	-EHa-			#turn off exceptions
+	-MT				#link all windows dependent libraries
 )
 
 # Include sub-projects.

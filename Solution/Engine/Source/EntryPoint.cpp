@@ -52,6 +52,7 @@ void Engine::PlatformLaunch()
 void Engine::PlatformLoop(Engine::GameMemory* memory, const Engine::GameInput* input, const Engine::GameOffscreenBuffer& buffer, const Engine::GameSoundBuffer& sound_buffer)
 {
 	GameState* game_state = reinterpret_cast<GameState*>(memory->permanent_storage);
+	Assert(sizeof(game_state) <= memory->permanent_storage_size);
 	if (!memory->is_initialized)
 	{
 		Engine::FileResult bitmap_memory = PlatformRead(__FILE__);
@@ -76,6 +77,7 @@ void Engine::PlatformLoop(Engine::GameMemory* memory, const Engine::GameInput* i
 			}
 			else
 			{
+				game_state->tone_frequency = 256;
 				game_state->x_offset += static_cast<i32>(controller.move_right.is_ended_down) - static_cast<i32>(controller.move_left.is_ended_down);
 			}
 

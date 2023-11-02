@@ -66,6 +66,8 @@ global_static Win32_BitmapBuffer global_back_buffer;
 global_static IXAudio2SourceVoice* global_source_voice;
 global_static f32* global_audio_memory;
 
+global_static i64 global_performance_frequency;
+
 Engine::FileResult Engine::PlatformRead(char* file_name)
 {
 	Engine::FileResult result = {};
@@ -419,16 +421,56 @@ internal_static f32 Win32_ProcessXInputStickValue(i16 value, i16 dead_zone)
 {
 	if (value < -dead_zone)
 	{
-		return value / 32768.f;
+		return (value + dead_zone) / (32768.f - dead_zone);
 	}
 	else if (value > dead_zone)
 	{
-		return value / 32767.f;
+		return (value + dead_zone) / (32767.f - dead_zone);
 	}
 	else
 	{
 		return 0.f;
 	}
+}
+
+internal_static MONITORINFOEX Win32_GetMonitor(HWND window_handle)
+{
+	HMONITOR monitor = MonitorFromWindow(window_handle, MONITOR_DEFAULTTOPRIMARY);
+
+	MONITORINFOEX monitorInfo;
+	monitorInfo.cbSize = sizeof(MONITORINFOEX);
+
+	if (GetMonitorInfo(monitor, &monitorInfo)) {
+		return monitorInfo;
+	}
+
+	Halt();
+	return {};
+}
+
+internal_static DEVMODE Win32_GetDevMode(LPCSTR device_name)
+{
+	DEVMODE dev_mode;
+	dev_mode.dmSize = sizeof(dev_mode);
+
+	if (EnumDisplaySettings(device_name, ENUM_CURRENT_SETTINGS, &dev_mode) != 0) {
+		return dev_mode;//dm.dmDisplayFrequency;
+	}
+
+	Halt();
+	return {};
+}
+
+inline LARGE_INTEGER Win32_GetWallClock()
+{
+	LARGE_INTEGER performance_counter;
+	QueryPerformanceCounter(&performance_counter);
+	return performance_counter;
+}
+
+inline f64 Win32_GetSecondElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+{
+	return static_cast<f64>(end.QuadPart - start.QuadPart) / static_cast<f64>(global_performance_frequency);
 }
 
 LRESULT CALLBACK Win32_WindowCallback(HWND window_handle, UINT message, WPARAM w_param, LPARAM l_param)
@@ -494,7 +536,12 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 	LARGE_INTEGER performance_frequency_result;
 	QueryPerformanceFrequency(&performance_frequency_result);
-	i64 performance_frequency = performance_frequency_result.QuadPart;
+	global_performance_frequency = performance_frequency_result.QuadPart;
+
+	//Set windows schedular granularity to 1ms
+	//So the sleep can be more granular
+	UINT desired_schedular_ms = 1;
+	b32 is_granular_sleep = (timeBeginPeriod(desired_schedular_ms) == TIMERR_NOERROR);
 
 	//MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
 
@@ -505,7 +552,6 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 	window_class.lpfnWndProc = Win32_WindowCallback;
 	window_class.hInstance = Instance;
 	window_class.lpszClassName = "GameEngineClass";
-
 
 	if (RegisterClass(&window_class))
 	{
@@ -526,6 +572,10 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 		if (window_handle)
 		{
+			u32 monitor_refresh_hz = Win32_GetDevMode(Win32_GetMonitor(window_handle).szDevice).dmDisplayFrequency;
+			u32 game_update_hz = 30;
+			f64 target_seconds_per_frame = 1. / static_cast<f64>(game_update_hz);
+
 			Win32_SoundOutput sound_output = {};
 			sound_output.sample_rate = 48000;
 			sound_output.num_channels = 2;
@@ -556,8 +606,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 				Engine::GameInput& new_input = input[0];
 				Engine::GameInput& old_input = input[1];
 
-				LARGE_INTEGER last_counter;
-				QueryPerformanceCounter(&last_counter);
+				LARGE_INTEGER last_counter = Win32_GetWallClock();
 
 				u64 last_cycle_count = __rdtsc();
 
@@ -601,27 +650,33 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 							XINPUT_GAMEPAD* pad = &controller_state.Gamepad;
 
-							new_controller.is_analog = true;
-
 							new_controller.stick_average_x = Win32_ProcessXInputStickValue(pad->sThumbLX, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 							new_controller.stick_average_y = Win32_ProcessXInputStickValue(pad->sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-
 
 							if (pad->wButtons & XINPUT_GAMEPAD_DPAD_UP)
 							{
 								new_controller.stick_average_x = 1.f;
+								new_controller.is_analog = false;
 							}
 							if(pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN)
 							{
 								new_controller.stick_average_x = -1.f;
+								new_controller.is_analog = false;
 							}
 							if(pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT)
 							{
 								new_controller.stick_average_y = -1.f;
+								new_controller.is_analog = false;
 							}
 							if(pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT)
 							{
 								new_controller.stick_average_y = 1.f;
+								new_controller.is_analog = false;
+							}
+
+							if (new_controller.stick_average_x != 0.f || new_controller.stick_average_y != 0.f)
+							{
+								new_controller.is_analog = true;
 							}
 
 							f32 threshold = 0.5f;
@@ -689,25 +744,50 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 					Win32_DisplayBufferInWindow(device_context, global_back_buffer, dimension.width, dimension.height);
 					ReleaseDC(window_handle, device_context);
 
-					u64 end_cycle_count = __rdtsc();
+					LARGE_INTEGER work_counter = Win32_GetWallClock();
+					i64 counter_elapsed = work_counter.QuadPart - last_counter.QuadPart;
+					const f64 ms_per_frame = (1000. * static_cast<f64>(counter_elapsed)) / static_cast<f64>(global_performance_frequency);
+					f64 fps = static_cast<f64>(global_performance_frequency) / static_cast<f64>(counter_elapsed);
 
-					LARGE_INTEGER end_counter;
-					QueryPerformanceCounter(&end_counter);
+					f64 work_seconds_elapsed = Win32_GetSecondElapsed(last_counter, work_counter);
 
-					u64 cycles_elapsed = end_cycle_count - last_cycle_count;
-					i64 counter_elapsed = end_counter.QuadPart - last_counter.QuadPart;
-					f64 ms_per_frame = (1000. * static_cast<f64>(counter_elapsed)) / static_cast<f64>(performance_frequency);
-					f64 fps = static_cast<f64>(performance_frequency) / static_cast<f64>(counter_elapsed);
-					f64 mega_cycles_per_frame = static_cast<f64>(cycles_elapsed) / (1000. * 1000.);
+					f64 frame_seconds_elapsed = work_seconds_elapsed;
+					if (frame_seconds_elapsed < target_seconds_per_frame)
+					{
+						if (is_granular_sleep)
+						{
+							DWORD sleep_ms = static_cast<DWORD>((target_seconds_per_frame - frame_seconds_elapsed) * 1000);
+							if (sleep_ms > 0)
+							{
+								Sleep(sleep_ms);
+							}
+						}
+
+						while (frame_seconds_elapsed < target_seconds_per_frame)
+						{
+							frame_seconds_elapsed = Win32_GetSecondElapsed(last_counter, Win32_GetWallClock());
+						}
+					}
+					else
+					{
+						//missed frame rate!
+					}
 
 					/*char write_buffer[256];
 					sprintf(write_buffer, "ms/frame: %.2fms, %.2ffps %.2fc\n", ms_per_frame, fps, mega_cycles_per_frame);
 					Engine::Log::LogCore(Engine::Log::Level::Warn, write_buffer);*/
 
+					LARGE_INTEGER end_counter = Win32_GetWallClock();
 					last_counter = end_counter;
-					last_cycle_count = end_cycle_count;
 
 					Swap(old_input, new_input);
+
+					{ //cycle per frame
+						u64 end_cycle_count = __rdtsc();
+						u64 cycles_elapsed = end_cycle_count - last_cycle_count;
+						f64 mega_cycles_per_frame = static_cast<f64>(cycles_elapsed) / (1000. * 1000.);
+						last_cycle_count = end_cycle_count;
+					}
 				}
 			}
 			else

@@ -1,6 +1,7 @@
 ﻿#include "Minimal.hpp"
 
-void App::Run()
+/*
+__declspec(dllimport) void App::Run()
 {
 
-}
+}*/

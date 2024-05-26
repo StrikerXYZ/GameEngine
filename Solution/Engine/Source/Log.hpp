@@ -1,5 +1,6 @@
 #pragma once
 
+/*
 #include "Definition.hpp"
 #include "Core.hpp"
 
@@ -93,4 +94,4 @@ namespace Engine
 		}
 
 	}
-};
+};*/

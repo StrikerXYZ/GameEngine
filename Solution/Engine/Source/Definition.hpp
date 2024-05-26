@@ -2,6 +2,12 @@
 
 #include <stdint.h>
 
+#ifdef IS_ENGINE
+#define ENGINE_API __declspec(dllexport)
+#else
+#define ENGINE_API __declspec(dllimport)
+#endif
+
 //define static types
 #define local_static static
 #define global_static static //variables cannot be used in other translation units and initialized to 0 by default

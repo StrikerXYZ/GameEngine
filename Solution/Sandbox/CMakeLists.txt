@@ -14,3 +14,8 @@ winmm.lib
 Xinput.lib 
 Engine
 )
+
+target_link_libraries(Game PRIVATE
+clang_rt.asan_dynamic-x86_64.lib
+clang_rt.asan_dynamic_runtime_thunk-x86_64.lib
+)

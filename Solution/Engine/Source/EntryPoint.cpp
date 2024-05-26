@@ -56,13 +56,6 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 	Assert(sizeof(game_state) <= memory->permanent_storage_size);
 	if (!memory->is_initialized)
 	{
-		FileResult bitmap_memory = memory->Debug_PlatformRead(thread, __FILE__);
-		if (bitmap_memory.content)
-		{
-			memory->Debug_PlatformFree(thread, bitmap_memory);
-		}
-
-		i32 tone_frequency = 256;
 		memory->is_initialized = true;
 	}
 
@@ -72,24 +65,13 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 		{
 			if (controller.is_analog)
 			{
-				game_state->tone_frequency = 256 + static_cast<u32>(128 * controller.stick_average_x);
-				game_state->x_offset += static_cast<i32>(4.f * controller.stick_average_y);
 			}
 			else
-			{
-				game_state->tone_frequency = 256;
-				game_state->x_offset += static_cast<i32>(controller.move_right.is_ended_down) - static_cast<i32>(controller.move_left.is_ended_down);
-			}
-
-			if (controller.action_down.is_ended_down)
-			{
-				game_state->y_offset += 1;
-			}
+			{}
 		}
 	}
 
-	GameOutputSound(sound_buffer, game_state->tone_frequency);
-	RenderGradient(buffer, game_state->x_offset, game_state->y_offset);
+	GameOutputSound(sound_buffer, 400);
 
 	//App::Run();
 }

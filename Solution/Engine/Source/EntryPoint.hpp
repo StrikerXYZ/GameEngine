@@ -78,9 +78,6 @@
 
 	struct GameState
 	{
-		i32 x_offset;
-		i32 y_offset;
-		u32 tone_frequency;
 	};
 
 	struct FileResult

@@ -56,7 +56,7 @@ struct Win32_SoundOutput
 
 	i32 running_sample_index;
 	i32 wave_period;
-	f32 t_sine;
+	r32 t_sine;
 	i32 latency_sample_count;
 };
 
@@ -100,7 +100,7 @@ global_static bool global_paused;
 global_static Win32_BitmapBuffer global_back_buffer;
 
 global_static IXAudio2SourceVoice* global_source_voice;
-global_static f32* global_audio_memory;
+global_static r32* global_audio_memory;
 
 global_static i64 global_performance_frequency;
 
@@ -402,7 +402,7 @@ internal_static void Win32_InitAudio(Win32_SoundOutput sound_output)
 		Halt(); return;
 	}
 
-	global_audio_memory = new f32[sound_output.sample_rate * sound_output.num_channels];
+	global_audio_memory = new r32[sound_output.sample_rate * sound_output.num_channels];
 	//{
 	//	f32 note_freq = 60; //A1
 	//	f32 PI = 3.14159265;
@@ -414,21 +414,21 @@ internal_static void Win32_InitAudio(Win32_SoundOutput sound_output)
 	//}
 	
 	{
-		local_static f32 t_sine = 0;
+		local_static r32 t_sine = 0;
 		u16 tone_volume = 1;
 		u32 tone_frequency = 128;
 		u32 wave_period = sound_output.sample_rate / tone_frequency;
-		f32 pi = 3.14159265f;
+		r32 pi = 3.14159265f;
 
-		f32* sample_out = global_audio_memory;
+		r32* sample_out = global_audio_memory;
 		for (u32 i = 0; i < sound_output.sample_rate; ++i)
 		{
-			f32 sine_value = sinf(t_sine);
-			f32 sample_value = sine_value * tone_volume;
+			r32 sine_value = sinf(t_sine);
+			r32 sample_value = sine_value * tone_volume;
 			*sample_out++ = sample_value;
 			*sample_out++ = sample_value;
 
-			t_sine += 2.f * pi * 1.f / static_cast<f32>(wave_period);
+			t_sine += 2.f * pi * 1.f / static_cast<r32>(wave_period);
 		}
 	}
 
@@ -457,7 +457,7 @@ internal_static void Win32_InitAudio(Win32_SoundOutput sound_output)
 #endif
 }
 
-internal_static void Win32_FillAudioBuffer(u32 sample_rate, u16 num_channels, f32* source_buffer)
+internal_static void Win32_FillAudioBuffer(u32 sample_rate, u16 num_channels, r32* source_buffer)
 {
 	XAUDIO2_VOICE_STATE voice_state;
 	global_source_voice->GetState(&voice_state);
@@ -652,7 +652,7 @@ internal_static void Win32_ProcessPendingMessages(Win32_State& state, GameContro
 	}
 }
 
-internal_static f32 Win32_ProcessXInputStickValue(i16 value, i16 dead_zone)
+internal_static r32 Win32_ProcessXInputStickValue(i16 value, i16 dead_zone)
 {
 	if (value < -dead_zone)
 	{
@@ -716,9 +716,9 @@ inline LARGE_INTEGER Win32_GetWallClock()
 	return performance_counter;
 }
 
-inline f64 Win32_GetSecondElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+inline r64 Win32_GetSecondElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
 {
-	return static_cast<f64>(end.QuadPart - start.QuadPart) / static_cast<f64>(global_performance_frequency);
+	return static_cast<r64>(end.QuadPart - start.QuadPart) / static_cast<r64>(global_performance_frequency);
 }
 
 LRESULT CALLBACK Win32_WindowCallback(HWND window_handle, UINT message, WPARAM w_param, LPARAM l_param)
@@ -803,7 +803,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 	//MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
 
-	Win32_ResizeDIBSection(&global_back_buffer, 1280, 720);
+	Win32_ResizeDIBSection(&global_back_buffer, 920, 540);
 
 
 	Win32_GetEXEFilename(state);
@@ -847,8 +847,8 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 			}
 			ReleaseDC(window_handle, device_constext);
 
-			f64 game_update_hz = static_cast<f64>(monitor_refresh_hz) / 2.;
-			f64 target_seconds_per_frame = 1. / static_cast<f64>(game_update_hz);
+			r64 game_update_hz = static_cast<r64>(monitor_refresh_hz) / 2.;
+			r64 target_seconds_per_frame = 1. / static_cast<r64>(game_update_hz);
 
 			Win32_SoundOutput sound_output = {};
 			sound_output.sample_rate = 48000;
@@ -859,12 +859,12 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 			global_running = true;
 			global_paused = false;
 
-			f32* audio_samples = static_cast<f32*>(VirtualAlloc(nullptr, sound_output.sample_rate * sound_output.num_channels * sizeof(f32), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
+			r32* audio_samples = static_cast<r32*>(VirtualAlloc(nullptr, sound_output.sample_rate * sound_output.num_channels * sizeof(r32), MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
 
 			LPVOID base_address = nullptr;
 			if constexpr (ENGINE_BUILD_DEBUG)
 			{
-				base_address = reinterpret_cast<LPVOID>(TeraBytes(1));
+				base_address = nullptr;//reinterpret_cast<LPVOID>(TeraBytes(1));
 			}
 
 			ThreadContext thread {};
@@ -909,7 +909,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 				GameInput input[2] = {};
 				GameInput& new_input = input[0];
 				GameInput& old_input = input[1];
-				new_input.seconds_for_update = static_cast<f32>(target_seconds_per_frame);
+				new_input.seconds_for_update = static_cast<r32>(target_seconds_per_frame);
 
 				LARGE_INTEGER last_counter = Win32_GetWallClock();
 
@@ -999,7 +999,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 									new_controller.is_analog = true;
 								}
 
-								f32 threshold = 0.5f;
+								r32 threshold = 0.5f;
 								Win32_ProcessXInputDigitalButton(old_controller.move_up, (new_controller.stick_average_y < -threshold), 1, new_controller.move_up);
 								Win32_ProcessXInputDigitalButton(old_controller.move_down, (new_controller.stick_average_y > threshold), 1, new_controller.move_down);
 								Win32_ProcessXInputDigitalButton(old_controller.move_left, (new_controller.stick_average_x < -threshold), 1, new_controller.move_left);
@@ -1039,6 +1039,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 						buffer.width = global_back_buffer.width;
 						buffer.height = global_back_buffer.height;
 						buffer.pitch = global_back_buffer.pitch;
+						buffer.bytes_per_pixel = global_back_buffer.bytes_per_pixel;
 
 						if (state.input_recording_index)
 						{
@@ -1079,12 +1080,12 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 						LARGE_INTEGER work_counter = Win32_GetWallClock();
 						i64 counter_elapsed = work_counter.QuadPart - last_counter.QuadPart;
-						const f64 ms_per_frame = (1000. * static_cast<f64>(counter_elapsed)) / static_cast<f64>(global_performance_frequency);
-						f64 fps = static_cast<f64>(global_performance_frequency) / static_cast<f64>(counter_elapsed);
+						const r64 ms_per_frame = (1000. * static_cast<r64>(counter_elapsed)) / static_cast<r64>(global_performance_frequency);
+						r64 fps = static_cast<r64>(global_performance_frequency) / static_cast<r64>(counter_elapsed);
 
-						f64 work_seconds_elapsed = Win32_GetSecondElapsed(last_counter, work_counter);
+						r64 work_seconds_elapsed = Win32_GetSecondElapsed(last_counter, work_counter);
 
-						f64 frame_seconds_elapsed = work_seconds_elapsed;
+						r64 frame_seconds_elapsed = work_seconds_elapsed;
 						if (frame_seconds_elapsed < target_seconds_per_frame)
 						{
 							if (is_granular_sleep)
@@ -1118,7 +1119,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 						{ //cycle per frame
 							u64 end_cycle_count = __rdtsc();
 							u64 cycles_elapsed = end_cycle_count - last_cycle_count;
-							f64 mega_cycles_per_frame = static_cast<f64>(cycles_elapsed) / (1000. * 1000.);
+							r64 mega_cycles_per_frame = static_cast<r64>(cycles_elapsed) / (1000. * 1000.);
 							last_cycle_count = end_cycle_count;
 						}
 					}

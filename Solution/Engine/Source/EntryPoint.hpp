@@ -10,13 +10,14 @@
 		i32 width;
 		i32 height;
 		i32 pitch;
+		i32 bytes_per_pixel;
 	};
 
 	struct GameSoundBuffer
 	{
 		u32 samples_per_second;
 		u32 sample_count;
-		f32* samples;
+		r32* samples;
 	};
 
 	struct GameButtonState
@@ -30,8 +31,8 @@
 		b32 is_connected;
 		b32 is_analog;
 
-		f32 stick_average_x;
-		f32 stick_average_y;
+		r32 stick_average_x;
+		r32 stick_average_y;
 
 		union
 		{
@@ -65,7 +66,7 @@
 		i32 mouse_y;
 		i32 mouse_z;
 
-		f32 seconds_for_update;
+		r32 seconds_for_update;
 
 		GameControllerInput controllers[5];
 	};

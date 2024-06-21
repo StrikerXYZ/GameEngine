@@ -499,10 +499,20 @@ internal_static void Win32_ResizeDIBSection(Win32_BitmapBuffer* bitmap_buffer, i
 
 internal_static void Win32_DisplayBufferInWindow(HDC device_context, Win32_BitmapBuffer bitmap_buffer, int window_width, int window_height)
 {
+	i32 offset_x = 10;
+	i32 offset_y = 10;
+
+	//Clear screen
+	PatBlt(device_context, 0, 0, window_width, offset_y, BLACKNESS);
+	PatBlt(device_context, 0, offset_y + bitmap_buffer.height, window_width, window_height, BLACKNESS);
+	PatBlt(device_context, 0, 0, offset_x, window_height, BLACKNESS);
+	PatBlt(device_context, offset_x + bitmap_buffer.width, 0, window_width, window_height, BLACKNESS);
+
+
 	//aspect ratio correction
 	StretchDIBits(
 		device_context,
-		0, 0, bitmap_buffer.width, bitmap_buffer.height, //For shipping: window_width, window_height
+		offset_x, offset_y, bitmap_buffer.width, bitmap_buffer.height, //For shipping: window_width, window_height
 		0, 0, bitmap_buffer.width, bitmap_buffer.height,
 		bitmap_buffer.memory,
 		&bitmap_buffer.info,
@@ -803,7 +813,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 	//MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
 
-	Win32_ResizeDIBSection(&global_back_buffer, 920, 540);
+	Win32_ResizeDIBSection(&global_back_buffer, 960, 540);
 
 
 	Win32_GetEXEFilename(state);
@@ -909,7 +919,6 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 				GameInput input[2] = {};
 				GameInput& new_input = input[0];
 				GameInput& old_input = input[1];
-				new_input.seconds_for_update = static_cast<r32>(target_seconds_per_frame);
 
 				LARGE_INTEGER last_counter = Win32_GetWallClock();
 
@@ -919,6 +928,8 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 				while (global_running)
 				{
+					new_input.frame_delta = static_cast<r32>(target_seconds_per_frame);
+
 					FILETIME check_file_time = Win32_GetFileLastWriteTime(source_game_code_dll_path);
 					if (CompareFileTime(&game_code.dll_last_write_time, &check_file_time) != 0)
 					{
@@ -1107,10 +1118,6 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 							//missed frame rate!
 						}
 
-						/*char write_buffer[256];
-						sprintf(write_buffer, "ms/frame: %.2fms, %.2ffps %.2fc\n", ms_per_frame, fps, mega_cycles_per_frame);
-						Log::LogCore(Log::Level::Warn, write_buffer);*/
-
 						LARGE_INTEGER end_counter = Win32_GetWallClock();
 						last_counter = end_counter;
 
@@ -1121,7 +1128,12 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 							u64 cycles_elapsed = end_cycle_count - last_cycle_count;
 							r64 mega_cycles_per_frame = static_cast<r64>(cycles_elapsed) / (1000. * 1000.);
 							last_cycle_count = end_cycle_count;
+
+							char write_buffer[256];
+							sprintf(write_buffer, "ms/frame: %.2fms, %.2ffps %.2fc\n", ms_per_frame, fps, mega_cycles_per_frame);
+							//Log::LogCore(Log::Level::Warn, write_buffer);
 						}
+
 					}
 				}
 			}

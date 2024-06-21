@@ -66,7 +66,7 @@
 		i32 mouse_y;
 		i32 mouse_z;
 
-		r32 seconds_for_update;
+		r32 frame_delta;
 
 		GameControllerInput controllers[5];
 	};
@@ -77,8 +77,45 @@
 		return input.controllers[controller_index];
 	}
 
+	struct WorldPosition
+	{
+		i32 tile_map_x;
+		i32 tile_map_y;
+		i32 tile_x;
+		i32 tile_y;
+		//i32 _tile_x;
+		//i32 _tile_y;
+		r32 relative_x;
+		r32 relative_y;
+	};
+
 	struct GameState
 	{
+		WorldPosition player_position;
+	};
+
+	struct TileMap
+	{
+		u32* tiles;
+	};
+
+	struct World
+	{
+		r32 tile_side_in_meters;
+		i32 tile_side_in_pixels;
+		r32 meters_to_pixels;
+
+		i32 tile_map_columns;
+		i32 tile_map_rows;
+
+		r32 lower_left_x;
+		r32 lower_left_y;
+		r32 tile_width;
+		r32 tile_height;
+
+		i32 count_x;
+		i32 count_y;
+		TileMap* tile_maps;
 	};
 
 	struct FileResult

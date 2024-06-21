@@ -6,12 +6,12 @@
 
 inline i32 RoundToI32(r32 real)
 {
-	return static_cast<i32>(real + .5f);
+	return static_cast<i32>(roundf(real));
 }
 
 inline u32 RoundToU32(r32 real)
 {
-	return static_cast<u32>(real + .5f);
+	return static_cast<u32>(roundf(real));
 }
 
 inline i32 TruncateToI32(r32 real)

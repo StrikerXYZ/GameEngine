@@ -77,14 +77,19 @@
 		return input.controllers[controller_index];
 	}
 
+	struct TileChunkPosition
+	{
+		u32 chunk_x;
+		u32 chunk_y;
+
+		u32 chunk_tile_x;
+		u32 chunk_tile_y;
+	};
+
 	struct WorldPosition
 	{
-		i32 tile_map_x;
-		i32 tile_map_y;
-		i32 tile_x;
-		i32 tile_y;
-		//i32 _tile_x;
-		//i32 _tile_y;
+		u32 tile_x;
+		u32 tile_y;
 		r32 relative_x;
 		r32 relative_y;
 	};
@@ -94,28 +99,25 @@
 		WorldPosition player_position;
 	};
 
-	struct TileMap
+	struct TileChunk
 	{
 		u32* tiles;
 	};
 
 	struct World
 	{
+		u32 chunk_shift;
+		u32 chunk_mask;
+		i32 chunk_dimension;
+
 		r32 tile_side_in_meters;
+		r32 tile_radius_in_meters;
 		i32 tile_side_in_pixels;
 		r32 meters_to_pixels;
 
-		i32 tile_map_columns;
-		i32 tile_map_rows;
-
-		r32 lower_left_x;
-		r32 lower_left_y;
-		r32 tile_width;
-		r32 tile_height;
-
-		i32 count_x;
-		i32 count_y;
-		TileMap* tile_maps;
+		u32 count_x;
+		u32 count_y;
+		TileChunk* tile_chunks;
 	};
 
 	struct FileResult

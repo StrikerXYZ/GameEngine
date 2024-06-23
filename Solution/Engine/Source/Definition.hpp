@@ -28,6 +28,8 @@ using r64 = double;
 
 using b32 = bool;
 
+using MemoryIndex = size_t;
+
 #define KiloBytes(Value) (1024ull * (Value))
 #define MegaBytes(Value) (1024ull * KiloBytes(Value))
 #define GigaBytes(Value) (1024ull * MegaBytes(Value))

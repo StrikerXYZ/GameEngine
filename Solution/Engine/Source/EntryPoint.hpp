@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Definition.hpp"
+#include "Tile.hpp"
 
 //namespace Engine {
 
@@ -77,47 +78,41 @@
 		return input.controllers[controller_index];
 	}
 
-	struct TileChunkPosition
+	struct MemoryArena
 	{
-		u32 chunk_x;
-		u32 chunk_y;
-
-		u32 chunk_tile_x;
-		u32 chunk_tile_y;
+		MemoryIndex size;
+		u8* base;
+		MemoryIndex used;
 	};
 
-	struct WorldPosition
+	internal_static void InitializeArena(MemoryArena& arena, MemoryIndex size, u8* base)
 	{
-		u32 tile_x;
-		u32 tile_y;
-		r32 relative_x;
-		r32 relative_y;
+		arena.size = size;
+		arena.base = base;
+		arena.used = 0;
+	}
+
+	internal_static void* PushSize_(MemoryArena& arena, MemoryIndex size)
+	{
+		Assert(arena.used + size <= arena.size);
+		void* result = arena.base + arena.used;
+		arena.used += size;
+		return result;
+	}
+#define PushStruct(Arena, Type) static_cast<Type*>(PushSize_(Arena, sizeof(Type)))
+#define PushArray(Arena, Count, Type) static_cast<Type*>(PushSize_(Arena, Count*sizeof(Type)))
+
+	struct World
+	{
+		TileMap* tile_map;
 	};
 
 	struct GameState
 	{
-		WorldPosition player_position;
-	};
-
-	struct TileChunk
-	{
-		u32* tiles;
-	};
-
-	struct World
-	{
-		u32 chunk_shift;
-		u32 chunk_mask;
-		i32 chunk_dimension;
-
-		r32 tile_side_in_meters;
-		r32 tile_radius_in_meters;
-		i32 tile_side_in_pixels;
-		r32 meters_to_pixels;
-
-		u32 count_x;
-		u32 count_y;
-		TileChunk* tile_chunks;
+		MemoryArena world_arena;
+		World* world;
+		TileMapPosition player_position;
+		u32* pixel_ptr;
 	};
 
 	struct FileResult
@@ -156,8 +151,11 @@
 		FuncPlatformFree* Debug_PlatformFree;
 	};
 
-	#define GAME_LOOP(name) void name(ThreadContext& thread, GameMemory* memory, const GameInput* input, const GameOffscreenBuffer& buffer, const GameSoundBuffer& sound_buffer)
+	#define GAME_LOOP(name) void name(ThreadContext& thread, GameMemory* memory, const GameInput* input, const GameOffscreenBuffer& buffer)
 	typedef GAME_LOOP(FuncPlatformLoop);
+
+	#define GAME_GET_SOUND_SAMPLES(name) void name(ThreadContext& thread, GameMemory* memory, const GameSoundBuffer& sound_buffer)
+	typedef GAME_GET_SOUND_SAMPLES(FuncPlatformGetSoundSamples);
 
 	void PlatformLaunch();
 //}

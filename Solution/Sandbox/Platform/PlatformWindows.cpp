@@ -65,6 +65,7 @@ struct Win32_GameCode
 	HMODULE game_code_dll;
 	FILETIME dll_last_write_time;
 	FuncPlatformLoop* Loop;
+	FuncPlatformGetSoundSamples* GetSoundSamples;
 	b32 is_valid;
 };
 
@@ -319,12 +320,14 @@ internal_static Win32_GameCode Win32_LoadGameCode(char* source_dll, char* temp_d
 	if (result.game_code_dll)
 	{
 		result.Loop = reinterpret_cast<FuncPlatformLoop*>(GetProcAddress(result.game_code_dll, "PlatformLoop"));
+		result.GetSoundSamples = reinterpret_cast<FuncPlatformGetSoundSamples*>(GetProcAddress(result.game_code_dll, "PlatformGetSoundSamples"));
 		result.is_valid = result.Loop;
 	}
 
 	if (!result.is_valid)
 	{
 		result.Loop = nullptr;
+		result.GetSoundSamples = nullptr;
 	}
 
 	return result;
@@ -811,8 +814,14 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 	UINT desired_schedular_ms = 1;
 	b32 is_granular_sleep = (timeBeginPeriod(desired_schedular_ms) == TIMERR_NOERROR);
 
-	//MessageBox(0, "Hello!", "Engine", MB_OK | MB_ICONINFORMATION);
-
+	//Target Display Size = 1920 x 1080
+	// 
+	// Width:
+	// 1920 -> 2048 (pot) = 2048 - 1920 = 128 pixels
+	// 
+	// Height:
+	// 1080 -> 2048 (pot) = 2048 - 1080 = 968 pixels
+	// 1024 + 128 = 1152 
 	Win32_ResizeDIBSection(&global_back_buffer, 960, 540);
 
 
@@ -1064,7 +1073,12 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 						if (game_code.Loop)
 						{
-							game_code.Loop(thread, &memory, input, buffer, sound_buffer);
+							game_code.Loop(thread, &memory, input, buffer);
+						}
+
+						if (game_code.GetSoundSamples)
+						{
+							game_code.GetSoundSamples(thread, &memory, sound_buffer);
 						}
 
 						Win32_FillAudioBuffer(sound_output.sample_rate, sound_output.num_channels, sound_buffer.samples);

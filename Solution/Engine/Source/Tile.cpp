@@ -130,3 +130,19 @@ inline b32 IsSameTile(TileMapPosition a, TileMapPosition b)
 		a.tile_z == b.tile_z);
 	return result;
 }
+
+inline TileMapDifference Subtract(TileMap& tile_map, TileMapPosition& a, TileMapPosition& b)
+{
+	TileMapDifference result;
+
+	r32 delta_tile_x = static_cast<float>(a.tile_x) - static_cast<float>(b.tile_x);
+	r32 delta_tile_y = static_cast<float>(a.tile_y) - static_cast<float>(b.tile_y);
+	r32 delta_tile_z = static_cast<float>(a.tile_y) - static_cast<float>(b.tile_z);
+
+	result.delta_x = tile_map.tile_side_in_meters * delta_tile_x + a.offset_x - b.offset_x;
+	result.delta_y = tile_map.tile_side_in_meters * delta_tile_y + a.offset_y - b.offset_y;
+
+	result.delta_z = tile_map.tile_side_in_meters * delta_tile_z;
+
+	return result;
+}

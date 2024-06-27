@@ -309,19 +309,24 @@ internal_static FILETIME Win32_GetFileLastWriteTime(char* filename)
 	return {};
 }
 
-internal_static Win32_GameCode Win32_LoadGameCode(char* source_dll, char* temp_dll)
+internal_static Win32_GameCode Win32_LoadGameCode(char* source_dll, char* temp_dll, char* lock_file_name)
 {
 	Win32_GameCode result = {};
 	
-	result.dll_last_write_time = Win32_GetFileLastWriteTime(source_dll);
-
-	CopyFile(source_dll, temp_dll, FALSE);
-	result.game_code_dll = LoadLibraryA(temp_dll);
-	if (result.game_code_dll)
+	WIN32_FILE_ATTRIBUTE_DATA ignored;
+	if (!GetFileAttributesEx(lock_file_name, GetFileExInfoStandard, &ignored))
 	{
-		result.Loop = reinterpret_cast<FuncPlatformLoop*>(GetProcAddress(result.game_code_dll, "PlatformLoop"));
-		result.GetSoundSamples = reinterpret_cast<FuncPlatformGetSoundSamples*>(GetProcAddress(result.game_code_dll, "PlatformGetSoundSamples"));
-		result.is_valid = result.Loop;
+
+		result.dll_last_write_time = Win32_GetFileLastWriteTime(source_dll);
+
+		CopyFile(source_dll, temp_dll, FALSE);
+		result.game_code_dll = LoadLibraryA(temp_dll);
+		if (result.game_code_dll)
+		{
+			result.Loop = reinterpret_cast<FuncPlatformLoop*>(GetProcAddress(result.game_code_dll, "PlatformLoop"));
+			result.GetSoundSamples = reinterpret_cast<FuncPlatformGetSoundSamples*>(GetProcAddress(result.game_code_dll, "PlatformGetSoundSamples"));
+			result.is_valid = (result.Loop != nullptr);
+		}
 	}
 
 	if (!result.is_valid)
@@ -830,6 +835,8 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 	Win32_BuildEXEFilepath(state, "Engine.dll", sizeof(source_game_code_dll_path), source_game_code_dll_path);
 	char temp_game_code_dll_path[WinPathNameCount];
 	Win32_BuildEXEFilepath(state, "Engine_Temp.dll", sizeof(temp_game_code_dll_path), temp_game_code_dll_path);
+	char lock_full_path[WinPathNameCount];
+	Win32_BuildEXEFilepath(state, "lock.tmp", sizeof(lock_full_path), lock_full_path);
 
 
 	WNDCLASS window_class = {};
@@ -931,7 +938,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 
 				LARGE_INTEGER last_counter = Win32_GetWallClock();
 
-				auto game_code = Win32_LoadGameCode(source_game_code_dll_path, temp_game_code_dll_path);
+				auto game_code = Win32_LoadGameCode(source_game_code_dll_path, temp_game_code_dll_path, lock_full_path);
 
 				u64 last_cycle_count = __rdtsc();
 
@@ -943,7 +950,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 					if (CompareFileTime(&game_code.dll_last_write_time, &check_file_time) != 0)
 					{
 						Win32_UnloadGameCode(game_code);
-						game_code = Win32_LoadGameCode(source_game_code_dll_path, temp_game_code_dll_path);
+						game_code = Win32_LoadGameCode(source_game_code_dll_path, temp_game_code_dll_path, lock_full_path);
 					}
 
 					GameControllerInput& old_keyboard_controller = get_controller(old_input, 0);

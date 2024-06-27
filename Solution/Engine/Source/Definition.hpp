@@ -8,6 +8,30 @@
 #define ENGINE_API __declspec(dllimport)
 #endif
 
+#if !defined(COMPILER_MSVC)
+#define COMPILER_MSVC 0
+#endif
+
+#if !defined(COMPILER_LLVM)
+#define COMPILER_LLVM 0
+#endif
+
+#if  !COMPILER_MSVC && !COMPILER_LLVM
+#if _MSC_VER
+#undef COMPILER_MSVC
+#define COMPILER_MSVC 1
+#else
+//default
+#undef COMPILER_LLVM
+#define COMPILER_LLVM 1
+#endif
+#endif
+
+#ifdef COMPILER_MSVC
+#include <intrin.h>
+#endif // COMPILER_MSVC
+
+
 //define static types
 #define local_static static
 #define global_static static //variables cannot be used in other translation units and initialized to 0 by default
@@ -26,7 +50,7 @@ using i64 = int64_t;
 using r32 = float;
 using r64 = double;
 
-using b32 = bool;
+using b32 = u32;
 
 using MemoryIndex = size_t;
 

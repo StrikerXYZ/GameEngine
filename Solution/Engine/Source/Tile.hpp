@@ -39,3 +39,10 @@ struct TileMapPosition
 	r32 offset_x;
 	r32 offset_y;
 };
+
+struct TileMapDifference
+{
+	r32 delta_x;
+	r32 delta_y;
+	r32 delta_z;
+};

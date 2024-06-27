@@ -107,12 +107,32 @@
 		TileMap* tile_map;
 	};
 
+	struct LoadedBitmap
+	{
+		i32 width;
+		i32 height;
+		u32* pixels;
+	};
+
+	struct HeroBitmap
+	{
+		i32 align_x;
+		i32 align_y;
+		LoadedBitmap head;
+		LoadedBitmap body;
+	};
+
 	struct GameState
 	{
 		MemoryArena world_arena;
 		World* world;
+
+		TileMapPosition camera_position;
 		TileMapPosition player_position;
-		u32* pixel_ptr;
+
+		LoadedBitmap backdrop;
+		HeroBitmap hero_bitmaps[4];
+		u32 facing_direction;
 	};
 
 	struct FileResult

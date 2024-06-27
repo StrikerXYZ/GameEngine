@@ -106,12 +106,23 @@ struct BitmapHeader
 	i32 height;
 	u16 plane;
 	u16 bits_per_pixel;
+
+	u32 compression;
+	u32 size_of_bitmap;
+	i32 horizontal_resolution;
+	i32 vertical_resolution;
+	u32 colours_used;
+	u32 colours_important;
+
+	u32 red_mask;
+	u32 green_mask;
+	u32 blue_mask;
 };
 #pragma pack(pop)
 
-internal_static u32* Debug_LoadBMP(ThreadContext& thread, FuncPlatformRead* read_entire_file, char* filename)
+internal_static LoadedBitmap Debug_LoadBMP(ThreadContext& thread, FuncPlatformRead* read_entire_file, char* filename)
 {
-	u32* result = nullptr;
+	LoadedBitmap result{};
 
 	const FileResult read_result = read_entire_file(thread, filename);
 
@@ -120,7 +131,41 @@ internal_static u32* Debug_LoadBMP(ThreadContext& thread, FuncPlatformRead* read
 		const auto* bitmap_header = static_cast<BitmapHeader*>(read_result.content);
 		
 		u32* pixels = reinterpret_cast<u32*>(static_cast<u8*>(read_result.content) + bitmap_header->bitmap_offset);
-		result = pixels;
+		result.pixels = pixels;
+		result.width = bitmap_header->width;
+		result.height = bitmap_header->height;
+
+		Assert(bitmap_header->compression == 3);
+
+		u32 red_mask = bitmap_header->red_mask;
+		u32 green_mask = bitmap_header->green_mask;
+		u32 blue_mask = bitmap_header->blue_mask;
+		u32 alpha_mask = ~(red_mask | green_mask | blue_mask);
+
+		BitScanResult red_shift = FindLeastSignificantSetBit(red_mask);
+		BitScanResult green_shift = FindLeastSignificantSetBit(green_mask);
+		BitScanResult blue_shift = FindLeastSignificantSetBit(blue_mask);
+		BitScanResult alpha_shift = FindLeastSignificantSetBit(alpha_mask);
+
+		Assert(red_shift.found);
+		Assert(green_shift.found);
+		Assert(blue_shift.found);
+		Assert(alpha_shift.found);
+
+		u32* source_dest = pixels;
+		for (i32 y = 0; y < bitmap_header->height; ++y)
+		{
+			for (i32 x = 0; x < bitmap_header->width; ++x)
+			{
+				u32 c = *source_dest;
+				*source_dest = (((c >> alpha_shift.index) & 0xFF) << 24) |
+					(((c >> red_shift.index) & 0xFF) << 16) |
+					(((c >> green_shift.index) & 0xFF) << 8) |
+					(((c >> blue_shift.index) & 0xFF) << 0);
+				++source_dest;
+			}
+		}
+
 	}
 
 	return result;
@@ -176,17 +221,122 @@ void PlatformLaunch()
 	//Log::Init();
 }
 
+void DrawBitmap(const GameOffscreenBuffer& buffer, LoadedBitmap& bitmap, r32 in_x, r32 in_y, i32 align_x = 0, i32 align_y = 0)
+{
+	in_x -= static_cast<float>(align_x);
+	in_y -= static_cast<float>(align_y);
+
+	i32 imin_x = RoundToI32(in_x);
+	i32 imin_y = RoundToI32(in_y);
+	i32 imax_x = RoundToI32(in_x + static_cast<r32>(bitmap.width));
+	i32 imax_y = RoundToI32(in_y + static_cast<r32>(bitmap.height));
+
+	i32 source_offset_x = 0;
+	if (imin_x < 0)
+	{
+		source_offset_x = -imin_x;
+		imin_x = 0;
+	}
+
+	i32 source_offset_y = 0;
+	if (imin_y < 0)
+	{
+		source_offset_y = -imin_y;
+		imin_y = 0;
+	}
+	if (imax_x > buffer.width)
+	{
+		imax_x = buffer.width;
+	}
+	if (imax_y > buffer.height)
+	{
+		imax_y = buffer.height;
+	}
+
+	u32* source_row = bitmap.pixels + bitmap.width * (bitmap.height - 1);
+	source_row += -source_offset_y * bitmap.width + source_offset_x;
+	u8* dest_row = static_cast<u8*>(buffer.memory) + imin_x * buffer.bytes_per_pixel + imin_y * buffer.pitch;
+	for (i32 y = imin_y; y < imax_y; ++y)
+	{
+		u32* dest = reinterpret_cast<u32*>(dest_row);
+		u32* source = source_row;
+		for (i32 x = imin_x; x < imax_x; ++x)
+		{
+			r32 alpha = static_cast<float>((*source >> 24) & 0xFF) / 255.f;
+
+			r32 source_red = static_cast<float>((*source >> 16) & 0xFF);
+			r32 source_green = static_cast<float>((*source >> 8) & 0xFF);
+			r32 source_blue = static_cast<float>((*source >> 0) & 0xFF);
+
+			r32 dest_red = static_cast<float>((*source >> 16) & 0xFF);
+			r32 dest_green = static_cast<float>((*source >> 8) & 0xFF);
+			r32 dest_blue = static_cast<float>((*source >> 0) & 0xFF);
+
+			r32 r = (1.f - alpha) * source_red + alpha * dest_red;
+			r32 g = (1.f - alpha) * source_green + alpha * dest_green;
+			r32 b = (1.f - alpha) * source_blue + alpha * dest_blue;
+
+			if ((*source >> 24) > 128)
+			{
+				*dest = (static_cast<u32>(r + 0.5f) << 16 | 
+					static_cast<u32>(g + 0.5f) << 8 |
+					static_cast<u32>(b + 0.5f) << 0);
+			}
+
+			++dest;
+			++source;
+		}
+
+		dest_row += buffer.pitch;
+		source_row -= bitmap.width;
+	}
+}
+
 extern "C"
 ENGINE_API GAME_LOOP(PlatformLoop)
 {
 	r32 player_height = 1.4f;
 	r32 player_width = player_height * 0.75f;
 
+	u32 tiles_per_width = 17;
+	u32 tiles_per_height = 9;
+
 	GameState* game_state = reinterpret_cast<GameState*>(memory->permanent_storage);
 	Assert(sizeof(game_state) <= memory->permanent_storage_size);
 	if (!memory->is_initialized)
 	{
-		game_state->pixel_ptr = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_background.bmp");
+		game_state->backdrop = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_background.bmp");
+
+		HeroBitmap* bitmap;
+
+		bitmap = game_state->hero_bitmaps;
+		bitmap->head = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_head_right.bmp");
+		bitmap->body = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_body.bmp");
+		bitmap->align_x = 74;
+		bitmap->align_y = 198;
+
+		++bitmap;
+		bitmap->head = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_head_back.bmp");
+		bitmap->body = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_body.bmp");
+		bitmap->align_x = 74;
+		bitmap->align_y = 198;
+
+		++bitmap;
+		bitmap->head = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_head_left.bmp");
+		bitmap->body = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_body.bmp");
+		bitmap->align_x = 74;
+		bitmap->align_y = 198;
+
+		++bitmap;
+		bitmap->head = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_head.bmp");
+		bitmap->body = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_body.bmp");
+		bitmap->align_x = 74;
+		bitmap->align_y = 198;
+
+		game_state->camera_position.tile_x = 17/2;
+		game_state->camera_position.tile_y = 9/2;
+		//game_state->camera_position.offset_x = .5f;
+		//game_state->camera_position.offset_y = .5f;
 
 		game_state->player_position.tile_x = 2;
 		game_state->player_position.tile_y = 2;
@@ -215,9 +365,6 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 			TileChunk);
 
 		tile_map.tile_side_in_meters = 1.4f;
-
-		u32 tiles_per_width = 17;
-		u32 tiles_per_height = 9;
 
 		u32 screen_x = 0;
 		u32 screen_y = 0;
@@ -388,18 +535,22 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 
 				if (controller.move_left.is_ended_down)
 				{
+					game_state->facing_direction = 2;
 					delta_player_x = -1.f;
 				}
 				if (controller.move_up.is_ended_down)
 				{
+					game_state->facing_direction = 1;
 					delta_player_y = 1.f;
 				}
 				if (controller.move_right.is_ended_down)
 				{
+					game_state->facing_direction = 0;
 					delta_player_x = 1.f;
 				}
 				if (controller.move_down.is_ended_down)
 				{
+					game_state->facing_direction = 3;
 					delta_player_y = -1.f;
 				}
 
@@ -446,11 +597,31 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 					game_state->player_position = new_position;
 				}
 
+				game_state->camera_position.tile_z = game_state->player_position.tile_z;
+
+				TileMapDifference difference = Subtract(tile_map, game_state->player_position, game_state->camera_position);
+				if (difference.delta_x > 9.f * tile_map.tile_side_in_meters)
+				{
+					game_state->camera_position.tile_x += tiles_per_width;
+				}
+				else if (difference.delta_x < -9.f * tile_map.tile_side_in_meters)
+				{
+					game_state->camera_position.tile_x -= tiles_per_width;
+				}
+				if (difference.delta_y > 5.f * tile_map.tile_side_in_meters)
+				{
+					game_state->camera_position.tile_y += tiles_per_height;
+				}
+				else if (difference.delta_y < -5.f * tile_map.tile_side_in_meters)
+				{
+					game_state->camera_position.tile_y -= tiles_per_height;
+				}
+				//game_state->camera_position.tile_y = game_state->player_position.tile_z;
 			}
 		}
 	}
 
-	DrawRectangle(buffer, 0.f, 0.f, static_cast<r32>(buffer.width), static_cast<r32>(buffer.height), 1.f, 0.f, 1.f);
+	DrawBitmap(buffer, game_state->backdrop, 0.f, 0.f);
 
 	r32 screen_center_x = .5f * static_cast<r32>(buffer.width);
 	r32 screen_center_y = .5f * static_cast<r32>(buffer.height);
@@ -459,15 +630,15 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 	{
 		for (i32 relative_column = -20; relative_column < 20; ++relative_column)
 		{
-			i32 signed_column = relative_column + static_cast<i32>(game_state->player_position.tile_x);
-			i32 signed_row = relative_row + static_cast<i32>(game_state->player_position.tile_y);
+			i32 signed_column = relative_column + static_cast<i32>(game_state->camera_position.tile_x);
+			i32 signed_row = relative_row + static_cast<i32>(game_state->camera_position.tile_y);
 
 			u32 column = static_cast<u32>(signed_column);
 			u32 row = static_cast<u32>(signed_row);
 
-			u32 tile_id = GetTileValue(tile_map, column, row, game_state->player_position.tile_z);
+			u32 tile_id = GetTileValue(tile_map, column, row, game_state->camera_position.tile_z);
 
-			if (tile_id > 0)
+			if (tile_id > 1)
 			{
 				r32 shade = (tile_id == 2) ? 1.f : 0.5f;
 
@@ -476,17 +647,17 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 					shade = 0.25f;
 				}
 
-				if (column == game_state->player_position.tile_x &&
-					row == game_state->player_position.tile_y)
+				if (column == game_state->camera_position.tile_x &&
+					row == game_state->camera_position.tile_y)
 				{
 					shade = 0.0f;
 				}
 
 				r32 center_x = screen_center_x
-					- game_state->player_position.offset_x * meters_to_pixels
+					- game_state->camera_position.offset_x * meters_to_pixels
 					+ static_cast<r32>(relative_column) * r_tile_side_in_pixels;
 				r32 center_y = screen_center_y
-					+ game_state->player_position.offset_y * meters_to_pixels
+					+ game_state->camera_position.offset_y * meters_to_pixels
 					- static_cast<r32>(relative_row) * r_tile_side_in_pixels;
 				r32 min_x = center_x - r_tile_side_in_pixels * .5f;
 				r32 min_y = center_y - r_tile_side_in_pixels * .5f;
@@ -498,27 +669,21 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 		}
 	}
 
-	r32 player_left = screen_center_x -
-		meters_to_pixels * (player_width * .5f);
-	r32 player_top = screen_center_y  -
-		meters_to_pixels * (player_height);
+	TileMapDifference difference = Subtract(tile_map, game_state->player_position, game_state->camera_position);
+
+	r32 player_gound_point_x = screen_center_x + meters_to_pixels * difference.delta_x;
+	r32 player_gound_point_y = screen_center_y - meters_to_pixels * difference.delta_y;
+	r32 player_left = player_gound_point_x - meters_to_pixels * (player_width * .5f);
+	r32 player_top = player_gound_point_y - meters_to_pixels * (player_height);
 	DrawRectangle(buffer, player_left, 
 		player_top, 
 		player_left + player_width * meters_to_pixels,
 		player_top + player_height * meters_to_pixels,
 		1.f, 0.f, 0.f);
 
-#if 0
-	u32* source = game_state->pixel_ptr;
-	u32* dest = static_cast<u32*>(buffer.memory);
-	for (i32 y = 0; y < buffer.height; ++y)
-	{
-		for (i32 x = 0; x < buffer.width; ++x)
-		{
-			*dest++ = *source++;
-		}
-	}
-#endif
+	HeroBitmap& hero_bitmap = game_state->hero_bitmaps[game_state->facing_direction];
+	DrawBitmap(buffer, hero_bitmap.body, player_gound_point_x, player_gound_point_y, hero_bitmap.align_x, hero_bitmap.align_y);
+	DrawBitmap(buffer, hero_bitmap.head, player_gound_point_x, player_gound_point_y, hero_bitmap.align_x, hero_bitmap.align_y);
 
 	//App::Run();
 }

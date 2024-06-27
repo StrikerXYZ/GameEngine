@@ -105,6 +105,36 @@ global_static r32* global_audio_memory;
 
 global_static i64 global_performance_frequency;
 
+global_static b32 DEBUG_show_cursor;
+
+global_static WINDOWPLACEMENT window_position{ sizeof(window_position), 0, 0, {}, {}, {} };
+
+internal_static void ToggleFullscreen(HWND window_handle)
+{
+	//Code from: https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
+
+	LONG window_style = GetWindowLongA(window_handle, GWL_STYLE);
+	if (window_style & WS_OVERLAPPEDWINDOW) 
+	{
+		MONITORINFO monitor_info{ sizeof(monitor_info), {}, {}, 0 };
+		if (GetWindowPlacement(window_handle, &window_position) && 
+			GetMonitorInfo(MonitorFromWindow(window_handle, MONITOR_DEFAULTTOPRIMARY), &monitor_info)) 
+		{
+			SetWindowLong(window_handle, GWL_STYLE, window_style & ~WS_OVERLAPPEDWINDOW);
+			SetWindowPos(window_handle, HWND_TOP,
+				monitor_info.rcMonitor.left, monitor_info.rcMonitor.top,
+				monitor_info.rcMonitor.right - monitor_info.rcMonitor.left,
+				monitor_info.rcMonitor.bottom - monitor_info.rcMonitor.top,
+				SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+		}
+	}
+	else {
+		SetWindowLong(window_handle, GWL_STYLE, window_style | WS_OVERLAPPEDWINDOW);
+		SetWindowPlacement(window_handle, &window_position);
+		SetWindowPos(window_handle, nullptr, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+	}
+}
 
 extern "C" 
 ENGINE_API PLATFORM_READ_FILE(PlatformReadDefinition)
@@ -507,26 +537,42 @@ internal_static void Win32_ResizeDIBSection(Win32_BitmapBuffer* bitmap_buffer, i
 
 internal_static void Win32_DisplayBufferInWindow(HDC device_context, Win32_BitmapBuffer bitmap_buffer, int window_width, int window_height)
 {
-	i32 offset_x = 10;
-	i32 offset_y = 10;
+	if (window_width >= bitmap_buffer.width * 2 && 
+		window_height >= bitmap_buffer.height * 2)
+	{
+		StretchDIBits(
+			device_context,
+			0, 0, 2 * bitmap_buffer.width, 2 * bitmap_buffer.height, //For shipping: window_width, window_height
+			0, 0, bitmap_buffer.width, bitmap_buffer.height,
+			bitmap_buffer.memory,
+			&bitmap_buffer.info,
+			DIB_RGB_COLORS,
+			SRCCOPY
+		);
+	}
+	else
+	{
+		i32 offset_x = 10;
+		i32 offset_y = 10;
 
-	//Clear screen
-	PatBlt(device_context, 0, 0, window_width, offset_y, BLACKNESS);
-	PatBlt(device_context, 0, offset_y + bitmap_buffer.height, window_width, window_height, BLACKNESS);
-	PatBlt(device_context, 0, 0, offset_x, window_height, BLACKNESS);
-	PatBlt(device_context, offset_x + bitmap_buffer.width, 0, window_width, window_height, BLACKNESS);
+		//Clear screen
+		PatBlt(device_context, 0, 0, window_width, offset_y, BLACKNESS);
+		PatBlt(device_context, 0, offset_y + bitmap_buffer.height, window_width, window_height, BLACKNESS);
+		PatBlt(device_context, 0, 0, offset_x, window_height, BLACKNESS);
+		PatBlt(device_context, offset_x + bitmap_buffer.width, 0, window_width, window_height, BLACKNESS);
 
 
-	//aspect ratio correction
-	StretchDIBits(
-		device_context,
-		offset_x, offset_y, bitmap_buffer.width, bitmap_buffer.height, //For shipping: window_width, window_height
-		0, 0, bitmap_buffer.width, bitmap_buffer.height,
-		bitmap_buffer.memory,
-		&bitmap_buffer.info,
-		DIB_RGB_COLORS,
-		SRCCOPY
-	);
+		//aspect ratio correction
+		StretchDIBits(
+			device_context,
+			offset_x, offset_y, bitmap_buffer.width, bitmap_buffer.height, //For shipping: window_width, window_height
+			0, 0, bitmap_buffer.width, bitmap_buffer.height,
+			bitmap_buffer.memory,
+			&bitmap_buffer.info,
+			DIB_RGB_COLORS,
+			SRCCOPY
+		);
+	}
 }
 
 internal_static void Win32_ProcessKeyboardMessage(GameButtonState& new_state, b32 is_down)
@@ -658,6 +704,17 @@ internal_static void Win32_ProcessPendingMessages(Win32_State& state, GameContro
 					{
 						global_running = false;
 					}
+
+					if (vk_code == VK_RETURN && alt_down)
+					{
+						if (is_down)
+						{
+							if (message.hwnd)
+							{
+								ToggleFullscreen(message.hwnd);
+							}
+						}
+					}
 				}
 			} break;
 
@@ -745,6 +802,19 @@ LRESULT CALLBACK Win32_WindowCallback(HWND window_handle, UINT message, WPARAM w
 
 	switch (message)
 	{
+
+	case WM_SETCURSOR:
+	{
+		if (DEBUG_show_cursor)
+		{
+			result = DefWindowProc(window_handle, message, w_param, l_param);
+		}
+		else
+		{
+			SetCursor(nullptr);
+		}
+	} break;
+
 	case WM_SIZE:
 	{
 		//auto Dimension = Win32GetWindowDimension(Window);
@@ -814,6 +884,14 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 	QueryPerformanceFrequency(&performance_frequency_result);
 	global_performance_frequency = performance_frequency_result.QuadPart;
 
+	Win32_GetEXEFilename(state);
+	char source_game_code_dll_path[WinPathNameCount];
+	Win32_BuildEXEFilepath(state, "Engine.dll", sizeof(source_game_code_dll_path), source_game_code_dll_path);
+	char temp_game_code_dll_path[WinPathNameCount];
+	Win32_BuildEXEFilepath(state, "Engine_Temp.dll", sizeof(temp_game_code_dll_path), temp_game_code_dll_path);
+	char lock_full_path[WinPathNameCount];
+	Win32_BuildEXEFilepath(state, "lock.tmp", sizeof(lock_full_path), lock_full_path);
+	
 	//Set windows schedular granularity to 1ms
 	//So the sleep can be more granular
 	UINT desired_schedular_ms = 1;
@@ -829,21 +907,16 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 	// 1024 + 128 = 1152 
 	Win32_ResizeDIBSection(&global_back_buffer, 960, 540);
 
-
-	Win32_GetEXEFilename(state);
-	char source_game_code_dll_path[WinPathNameCount];
-	Win32_BuildEXEFilepath(state, "Engine.dll", sizeof(source_game_code_dll_path), source_game_code_dll_path);
-	char temp_game_code_dll_path[WinPathNameCount];
-	Win32_BuildEXEFilepath(state, "Engine_Temp.dll", sizeof(temp_game_code_dll_path), temp_game_code_dll_path);
-	char lock_full_path[WinPathNameCount];
-	Win32_BuildEXEFilepath(state, "lock.tmp", sizeof(lock_full_path), lock_full_path);
-
+#if ENGINE_BUILD_DEBUG
+	DEBUG_show_cursor = true;
+#endif
 
 	WNDCLASS window_class = {};
 	window_class.style = CS_HREDRAW | CS_VREDRAW;
 	window_class.lpfnWndProc = Win32_WindowCallback;
 	window_class.hInstance = Instance;
 	window_class.lpszClassName = "GameEngineClass";
+	window_class.hCursor = LoadCursorA(nullptr, IDC_ARROW);
 
 	if (RegisterClass(&window_class))
 	{

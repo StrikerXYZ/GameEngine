@@ -4,6 +4,36 @@
 
 #include "math.h"
 
+inline i32 SignOf(i32 value)
+{
+	return value >= 0? 1 : -1;
+}
+
+inline r32 SquareRoot(r32 real)
+{
+	return sqrtf(real);
+}
+
+inline r32 OneOverSquareRoot(r32 real)
+{
+	return 1.0f/sqrtf(real);
+}
+
+inline r32 AbsoluteValue(r32 real)
+{
+	return fabsf(real);
+}
+
+inline u32 RotateLeft(u32 value, i32 amount)
+{
+	return _rotl(value, amount);
+}
+
+inline u32 RotateRight(u32 value, i32 amount)
+{
+	return _rotr(value, amount);
+}
+
 inline i32 RoundToI32(r32 real)
 {
 	return static_cast<i32>(roundf(real));

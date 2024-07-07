@@ -72,10 +72,16 @@ internal_static void SetTileValue(TileMap& tile_map, u32 tile_x, u32 tile_y, u32
 	}
 }
 
+internal_static b32 IsTileValueEmpty(u32 tile_value)
+{
+	b32 is_empty = (tile_value == 1 || tile_value == 3 || tile_value == 4);
+	return is_empty;
+}
+
 internal_static b32 IsTileMapPointEmpty(TileMap& tile_map, TileMapPosition position)
 {
 	u32 tile_value = GetTileValue(tile_map, position);
-	b32 is_empty = (tile_value == 1 || tile_value == 3 || tile_value == 4);
+	b32 is_empty = IsTileValueEmpty(tile_value);
 	return is_empty;
 }
 
@@ -109,16 +115,16 @@ inline void RecanonicalizeCoord(TileMap& tile_map, u32& tile, r32& relative)
 	tile = static_cast<u32>(static_cast<i32>(tile) + offset);
 	relative -= static_cast<r32>(offset) * tile_side_in_meters;
 
-	Assert(relative >= tile_side_in_meters * -.5f);
-	Assert(relative <= tile_side_in_meters * .5f);
+	Assert(relative >= tile_side_in_meters * -.5001f);
+	Assert(relative <= tile_side_in_meters * .5001f);
 }
 
 inline TileMapPosition RecanonicalizePosition(TileMap& tile_map, TileMapPosition position)
 {
 	TileMapPosition canonical_position = position;
 
-	RecanonicalizeCoord(tile_map, canonical_position.tile_x, canonical_position.offset_x);
-	RecanonicalizeCoord(tile_map, canonical_position.tile_y, canonical_position.offset_y);
+	RecanonicalizeCoord(tile_map, canonical_position.tile_x, canonical_position.offset_.x);
+	RecanonicalizeCoord(tile_map, canonical_position.tile_y, canonical_position.offset_.y);
 
 	return canonical_position;
 }
@@ -135,14 +141,30 @@ inline TileMapDifference Subtract(TileMap& tile_map, TileMapPosition& a, TileMap
 {
 	TileMapDifference result;
 
-	r32 delta_tile_x = static_cast<float>(a.tile_x) - static_cast<float>(b.tile_x);
-	r32 delta_tile_y = static_cast<float>(a.tile_y) - static_cast<float>(b.tile_y);
+	V2 delta_tile_xy	{	
+							(static_cast<float>(a.tile_x) - static_cast<float>(b.tile_x)), 
+							(static_cast<float>(a.tile_y) - static_cast<float>(b.tile_y)) 
+						};
 	r32 delta_tile_z = static_cast<float>(a.tile_y) - static_cast<float>(b.tile_z);
 
-	result.delta_x = tile_map.tile_side_in_meters * delta_tile_x + a.offset_x - b.offset_x;
-	result.delta_y = tile_map.tile_side_in_meters * delta_tile_y + a.offset_y - b.offset_y;
-
+	result.delta_xy = tile_map.tile_side_in_meters * delta_tile_xy + a.offset_ - b.offset_;
 	result.delta_z = tile_map.tile_side_in_meters * delta_tile_z;
 
 	return result;
+}
+
+inline TileMapPosition CentredTilePoint(u32 tile_x, u32 tile_y, u32 tile_z)
+{
+	TileMapPosition result{};
+	result.tile_x = tile_x;
+	result.tile_y = tile_y;
+	result.tile_z = tile_z;
+
+	return result;
+}
+
+inline TileMapPosition Offset(TileMap& tile_map, TileMapPosition position, V2 offset)
+{
+	position.offset_ += offset;
+	return RecanonicalizePosition(tile_map, position);
 }

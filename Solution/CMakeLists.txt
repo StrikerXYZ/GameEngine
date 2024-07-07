@@ -57,6 +57,7 @@ add_compile_options(
 	-Wno-cast-function-type		#casey
 	-Wno-gnu-anonymous-struct	#casey
 	-Wno-nested-anon-types		#casey
+	-Wno-missing-braces		#casey
 	-WX
 	-Oi				#intrinsic optimizations
 	-EHs

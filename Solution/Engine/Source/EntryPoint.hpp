@@ -3,6 +3,10 @@
 #include "Definition.hpp"
 #include "Tile.hpp"
 
+#define Minimum(a, b) ((a < b)? (a) : (b))
+#define Maximum(a, b) ((a > b)? (a) : (b))
+
+
 //namespace Engine {
 
 	struct GameOffscreenBuffer
@@ -122,13 +126,27 @@
 		LoadedBitmap body;
 	};
 
+	struct Entity
+	{
+		b32 exists;
+		TileMapPosition position;
+		V2 velocity;
+		u32 facing_direction;
+		r32 width;
+		r32 height;
+	};
+
 	struct GameState
 	{
 		MemoryArena world_arena;
 		World* world;
 
+		u32 camera_follow_entity_index;
 		TileMapPosition camera_position;
-		TileMapPosition player_position;
+
+		u32 player_index_for_controller[ArrayCount(GameInput{}.controllers)];
+		u32 entity_count;
+		Entity entities[256];
 
 		LoadedBitmap backdrop;
 		HeroBitmap hero_bitmaps[4];

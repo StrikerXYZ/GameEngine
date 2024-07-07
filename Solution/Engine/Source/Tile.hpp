@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Definition.hpp"
+#include "Math.hpp"
 
 struct TileChunkPosition
 {
@@ -36,13 +37,11 @@ struct TileMapPosition
 	u32 tile_x;
 	u32 tile_y;
 	u32 tile_z;
-	r32 offset_x;
-	r32 offset_y;
+	V2 offset_;
 };
 
 struct TileMapDifference
 {
-	r32 delta_x;
-	r32 delta_y;
+	V2 delta_xy;
 	r32 delta_z;
 };

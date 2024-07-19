@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Definition.hpp"
-#include "Tile.hpp"
+#include "World.hpp"
 
 #define Minimum(a, b) ((a < b)? (a) : (b))
 #define Maximum(a, b) ((a > b)? (a) : (b))
@@ -106,11 +106,6 @@
 #define PushStruct(Arena, Type) static_cast<Type*>(PushSize_(Arena, sizeof(Type)))
 #define PushArray(Arena, Count, Type) static_cast<Type*>(PushSize_(Arena, Count*sizeof(Type)))
 
-	struct World
-	{
-		TileMap* tile_map;
-	};
-
 	struct LoadedBitmap
 	{
 		i32 width;
@@ -126,14 +121,50 @@
 		LoadedBitmap body;
 	};
 
-	struct Entity
+	enum EntityType
 	{
-		b32 exists;
-		TileMapPosition position;
+		EntityType_Null,
+		EntityType_Hero,
+		EntityType_Wall,
+	};
+
+	struct HighEntity
+	{
+		V2 position;
 		V2 velocity;
+		i32 tile_z;
 		u32 facing_direction;
+
+		r32 z;
+		r32 delta_z;
+
+		u32 low_entity_index;
+	};
+
+	struct LowEntity
+	{
+		EntityType type;
+		WorldPosition position;
 		r32 width;
 		r32 height;
+
+		i32 velocity_tile_z;
+		b32 collides;
+
+		u32 high_entity_index;
+	};
+
+	struct Entity
+	{
+		u32 low_index;
+		LowEntity* low;
+		HighEntity* high;
+	};
+
+	struct LowEntityChunkReference
+	{
+		WorldChunk* tile_chunk;
+		u32 entity_index_in_chunk;
 	};
 
 	struct GameState
@@ -142,11 +173,15 @@
 		World* world;
 
 		u32 camera_follow_entity_index;
-		TileMapPosition camera_position;
+		WorldPosition camera_position;
 
 		u32 player_index_for_controller[ArrayCount(GameInput{}.controllers)];
-		u32 entity_count;
-		Entity entities[256];
+		
+		u32 low_entity_count;
+		LowEntity low_entities[100000];
+
+		u32 high_entity_count;
+		HighEntity high_entities[256];
 
 		LoadedBitmap backdrop;
 		HeroBitmap hero_bitmaps[4];

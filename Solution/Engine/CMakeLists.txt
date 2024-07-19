@@ -5,6 +5,7 @@ add_library (Engine SHARED ${SRC_FILES})
 
 target_include_directories(Engine PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
+
 add_subdirectory("External/SpdLog")
 target_link_libraries(Engine PUBLIC 
 spdlog::spdlog_header_only

@@ -4,11 +4,11 @@
 #include "Core.hpp"
 #include "Log.hpp"
 #include "Intrinsics.hpp"
-#include "Tile.hpp"
+#include "World.hpp"
 #include "Random.hpp"
 #include "Math.hpp"
 
-#include "Tile.cpp"
+#include "World.cpp"
 
 internal_static void GameOutputSound(const GameSoundBuffer& buffer, u32 tone_frequency)
 {
@@ -234,15 +234,15 @@ void PlatformLaunch()
 	//Log::Init();
 }
 
-void DrawBitmap(const GameOffscreenBuffer& buffer, LoadedBitmap& bitmap, r32 in_x, r32 in_y, i32 align_x = 0, i32 align_y = 0)
+void DrawBitmap(const GameOffscreenBuffer& buffer, LoadedBitmap& bitmap, r32 in_x, r32 in_y, i32 align_x = 0, i32 align_y = 0, r32 c_alpha = 1.f)
 {
 	in_x -= static_cast<float>(align_x);
 	in_y -= static_cast<float>(align_y);
 
 	i32 imin_x = RoundToI32(in_x);
 	i32 imin_y = RoundToI32(in_y);
-	i32 imax_x = RoundToI32(in_x + static_cast<r32>(bitmap.width));
-	i32 imax_y = RoundToI32(in_y + static_cast<r32>(bitmap.height));
+	i32 imax_x = static_cast<i32>(in_x + static_cast<r32>(bitmap.width));
+	i32 imax_y = static_cast<i32>(in_y + static_cast<r32>(bitmap.height));
 
 	i32 source_offset_x = 0;
 	if (imin_x < 0)
@@ -276,6 +276,7 @@ void DrawBitmap(const GameOffscreenBuffer& buffer, LoadedBitmap& bitmap, r32 in_
 		for (i32 x = imin_x; x < imax_x; ++x)
 		{
 			r32 alpha = static_cast<float>((*source >> 24) & 0xFF) / 255.f;
+			alpha *= c_alpha;
 
 			r32 source_red = static_cast<float>((*source >> 16) & 0xFF);
 			r32 source_green = static_cast<float>((*source >> 8) & 0xFF);
@@ -305,64 +306,176 @@ void DrawBitmap(const GameOffscreenBuffer& buffer, LoadedBitmap& bitmap, r32 in_
 	}
 }
 
-internal_static u32 AddEntity(GameState& game_state)
+internal_static LowEntity* GetLowEntity(GameState& game_state, u32 index)
 {
-	u32 entity_index = game_state.entity_count++;
-	Assert(game_state.entity_count < ArrayCount(game_state.entities));
-	Entity& entity = game_state.entities[entity_index];
-	entity = {};
+	LowEntity* result{};
+
+	if (index > 0 && index < game_state.low_entity_count)
+	{
+		result = game_state.low_entities + index;
+	}
+
+	return result;
+}
+
+inline HighEntity* MakeEntityHighFrequency(GameState& game_state, u32 low_index)
+{
+	HighEntity* high_entity{};
+
+	LowEntity& low_entity = game_state.low_entities[low_index];
+	if (low_entity.high_entity_index)
+	{
+		high_entity = game_state.high_entities + low_entity.high_entity_index;
+	}
+	else
+	{
+		if (game_state.high_entity_count < ArrayCount(game_state.high_entities))
+		{
+			u32 high_index = game_state.high_entity_count++;
+			high_entity = &game_state.high_entities[high_index];
+
+			WorldDifference difference = Subtract(*(game_state.world), low_entity.position, game_state.camera_position);
+			high_entity->position = difference.delta_xy;
+			high_entity->velocity = {};
+			high_entity->tile_z = low_entity.position.tile_z;
+			high_entity->facing_direction = 0;
+			high_entity->low_entity_index = low_index;
+
+			low_entity.high_entity_index = high_index;
+		}
+		else
+		{
+			InvalidCodePath();
+		}
+	}
+
+	return high_entity;
+}
+
+inline void MakeEntityLowFrequency(GameState& game_state, u32 low_index)
+{
+	LowEntity& low_entity = game_state.low_entities[low_index];
+	u32 high_index = low_entity.high_entity_index;
+	if (high_index)
+	{
+		u32 last_high_index = game_state.high_entity_count - 1;
+		if (high_index != last_high_index)
+		{
+			HighEntity& last_high_entity = game_state.high_entities[last_high_index];
+			HighEntity& deleted_high_entity = game_state.high_entities[high_index];
+
+			deleted_high_entity = last_high_entity;
+			game_state.low_entities[last_high_entity.low_entity_index].high_entity_index = 0;
+		}
+		--high_index;
+		game_state.low_entities[low_index].high_entity_index = 0;
+	}
+}
+
+internal_static Entity GetHighEntity(GameState& game_state, u32 low_index)
+{
+	Entity result{};
+
+	if (low_index > 0 && low_index < game_state.low_entity_count)
+	{
+		result.low_index = low_index;
+		result.low = game_state.low_entities + low_index;
+		result.high = MakeEntityHighFrequency(game_state, low_index);
+	}
+
+	return result;
+}
+
+inline void OffsetAndCheckFrequencyByArea(GameState& game_state, V2 offset, Rectangle high_frequency_bounds)
+{
+	for (u32 high_index = 0; high_index < game_state.high_entity_count;)
+	{
+		HighEntity& high_entity = game_state.high_entities[high_index];
+		high_entity.position += offset;
+
+		if (IsInRectangle(high_frequency_bounds, high_entity.position))
+		{
+			++high_index;
+		}
+		else
+		{
+			MakeEntityLowFrequency(game_state, high_entity.low_entity_index);
+		}
+	}
+}
+
+internal_static u32 AddLowEntity(GameState& game_state, EntityType type)
+{
+	Assert(game_state.low_entity_count < ArrayCount(game_state.low_entities));
+	u32 entity_index = game_state.low_entity_count++;
+
+	game_state.low_entities[entity_index] = {};
+	game_state.low_entities[entity_index].type = type;
+
 	return entity_index;
 }
 
-internal_static Entity* GetEntity(GameState& game_state, u32 index)
+internal_static u32 AddWall(GameState& game_state, i32 tile_x, i32 tile_y, i32 tile_z)
 {
-	Entity* entity = nullptr;
+	u32 low_index = AddLowEntity(game_state, EntityType_Wall);
+	LowEntity* entity = GetLowEntity(game_state, low_index);
+	entity->position.tile_x = tile_x;
+	entity->position.tile_y = tile_y;
+	entity->position.tile_z = tile_z;
+	entity->height = game_state.world->tile_side_in_meters;
+	entity->width = entity->height;
+	entity->collides = true;
 
-	if (index > 0 && index < ArrayCount(game_state.entities))
-	{
-		entity = &game_state.entities[index];
-	}
-
-	return entity;
+	return low_index;
 }
 
-internal_static void InitializePlayer(GameState& game_state, u32 entity_index)
+internal_static u32 AddPlayer(GameState& game_state)
 {
-	Entity* entity = GetEntity(game_state, entity_index);
-	entity->exists = true;
+	u32 low_index = AddLowEntity(game_state, EntityType_Hero);
+	LowEntity* entity = GetLowEntity(game_state, low_index);
 	entity->position.tile_x = 2;
 	entity->position.tile_y = 2;
 	entity->position.offset_ = { .5f , .5f };
+	entity->position = game_state.camera_position;
+	entity->height = 0.5f;//1.4f;
+	entity->width = 1.0f;// entity->height * 0.75f;
+	entity->collides = true;
 
-	entity->height = 1.4f;
-	entity->width = entity->height * 0.75f;
+	//MakeEntityHighFrequency(game_state, low_index);
 
-	if (!GetEntity(game_state, game_state.camera_follow_entity_index))
+	if (game_state.camera_follow_entity_index == 0)
 	{
-		game_state.camera_follow_entity_index = entity_index;
+		game_state.camera_follow_entity_index = low_index;
 	}
+
+	return low_index;
 }
 
-internal_static void TestWall(r32 wall_x, r32 relative_x, r32 relative_y, r32 player_delta_x, r32 player_delta_y, r32& min_time, r32 min_y, r32 max_y)
+internal_static b32 TestWall(r32 wall_x, r32 relative_x, r32 relative_y, r32 player_delta_x, r32 player_delta_y, r32& min_time, r32 min_y, r32 max_y)
 {
-	r32 time_epsilon = 0.0001f;
+	b32 hit = false;
+
+	r32 time_epsilon = 0.001f;
 	if (player_delta_x != 0.f)
 	{
 		r32 result_time = (wall_x - relative_x) / player_delta_x;
-		r32 y = relative_y * result_time * player_delta_y;
+		r32 y = relative_y + result_time * player_delta_y;
 		if (result_time >= 0.f && result_time < min_time)
 		{
 			if (y >= min_y && y <= max_y)
 			{
 				min_time = Maximum(0.f, result_time - time_epsilon);
+				hit = true;
 			}
 		}
 	}
+
+	return hit;
 }
 
 internal_static void MovePlayer(GameState& game_state, Entity& entity, r32 delta_time, V2 acceleration)
 {
-	TileMap& tile_map = *game_state.world->tile_map;
+	World& world = *game_state.world;
 
 	auto acceleration_length_squared = LengthSquared(acceleration);
 	if (acceleration_length_squared > 1.0f)
@@ -375,171 +488,165 @@ internal_static void MovePlayer(GameState& game_state, Entity& entity, r32 delta
 
 	acceleration *= player_speed;
 
-	acceleration -= 8.0f * entity.velocity;
+	acceleration -= 8.0f * entity.high->velocity;
 
-	auto old_position = entity.position;
+	V2 old_position = entity.high->position;
 
 	//p' = 1/2 at^2 + vt + p
-	V2 player_delta = 0.5f * acceleration * Square(delta_time) + entity.velocity * delta_time;
+	V2 player_delta = 0.5f * acceleration * Square(delta_time) + entity.high->velocity * delta_time;
 
 	//v' = at + v
-	entity.velocity = acceleration * delta_time + entity.velocity;
+	entity.high->velocity = acceleration * delta_time + entity.high->velocity;
 
-	TileMapPosition new_position = Offset(tile_map, old_position, player_delta);
+	V2 new_position = old_position + player_delta;
 
-#if 0
+		/*u32 min_tile_x = Minimum(old_position.x, new_position.x);
+	u32 min_tile_y = Minimum(old_position.y, new_position.y);
+	u32 max_tile_x = Maximum(old_position.x, new_position.x);
+	u32 max_tile_y = Maximum(old_position.y, new_position.y);
 
-	auto position_left = new_position;
-	position_left.offset.x -= 0.5f * entity.width;
-	position_left = RecanonicalizePosition(tile_map, position_left);
+	u32 entity_tile_width = CeilToU32(entity.dormant->width / world.tile_side_in_meters);
+	u32 entity_tile_height = CeilToU32(entity.dormant->height / world.tile_side_in_meters);
 
-	auto position_right = new_position;
-	position_right.offset.x += 0.5f * entity.width;
-	position_right = RecanonicalizePosition(tile_map, position_right);
+	min_tile_x -= entity_tile_width;
+	min_tile_y -= entity_tile_height;
+	max_tile_x += entity_tile_width;
+	max_tile_y += entity_tile_height;
 
-	b32 collided = false;
-	TileMapPosition collision_position;
-	if (!IsTileMapPointEmpty(tile_map, new_position))
+	u32 tile_z = entity.dormant->position.tile_z;*/
+
+	//r32 remaining_time = 1.0f;
+	for (u32 iteration = 0; iteration < 4; ++iteration)
 	{
-		collision_position = new_position;
-		collided = true;
-	}
-	if (!IsTileMapPointEmpty(tile_map, position_left))
-	{
-		collision_position = position_left;
-		collided = true;
-	}
-	if (!IsTileMapPointEmpty(tile_map, position_right))
-	{
-		collision_position = position_right;
-		collided = true;
-	}
+		r32 min_time = 1.0f;
 
-	if (collided)
-	{
-		V2 reflection_normal = { 0, 1 };
+		V2 wall_normal{};
 
-		if (collision_position.tile_x < entity.position.tile_x)
+		u32 hit_high_entity_index = 0;
+
+		V2 desired_position = entity.high->position + player_delta;
+
+		for (u32 test_high_index = 1; test_high_index < game_state.high_entity_count; ++test_high_index)
 		{
-			reflection_normal = { 1, 0 };
-		}
-		if (collision_position.tile_x > entity.position.tile_x)
-		{
-			reflection_normal = { -1, 0 };
-		}
-		if (collision_position.tile_y < entity.position.tile_y)
-		{
-			reflection_normal = { 0, -1 };
-		}
-		if (collision_position.tile_y > entity.position.tile_y)
-		{
-			reflection_normal = { 0, 1 };
-		}
-
-		entity.velocity = entity.velocity - Inner(entity.velocity, reflection_normal) * reflection_normal;
-	}
-	else
-	{
-		entity.position = new_position;
-	}
-#else
-
-#if 0
-	u32 min_tile_x = Minimum(old_position.tile_x, new_position.tile_x);
-	u32 min_tile_y = Minimum(old_position.tile_y, new_position.tile_y);
-	u32 one_past_max_tile_x = Maximum(old_position.tile_x, new_position.tile_x) + 1;
-	u32 one_past_max_tile_y = Maximum(old_position.tile_y, new_position.tile_y) + 1;
-#else
-	u32 start_tile_x = old_position.tile_x;
-	u32 start_tile_y = old_position.tile_y;
-	u32 end_tile_x = new_position.tile_x;
-	u32 end_tile_y = new_position.tile_y;
-	i32 delta_x = SignOf(static_cast<i32>(end_tile_x - start_tile_x));
-	i32 delta_y = SignOf(static_cast<i32>(end_tile_y - start_tile_y));
-#endif
-
-	u32 tile_z = entity.position.tile_z;
-	r32 min_time = 1.f;
-	u32 tile_y = start_tile_y;
-	for(;;)
-	{
-		u32 tile_x = start_tile_x;
-		for (;;)
-		{
-			auto test_tile_position = CentredTilePoint(tile_x, tile_y, tile_z);
-			u32 tile_value = GetTileValue(tile_map, test_tile_position);
-			if (!IsTileValueEmpty(tile_value))
+			if (test_high_index != entity.low->high_entity_index)
 			{
-				V2 min_corner = -0.5f * V2{ tile_map.tile_side_in_meters, tile_map.tile_side_in_meters };
-				V2 max_corner = 0.5f * V2{ tile_map.tile_side_in_meters , tile_map.tile_side_in_meters };
+				Entity test_entity;
+				test_entity.high = game_state.high_entities + test_high_index;
+				test_entity.low_index = test_entity.high->low_entity_index;
+				test_entity.low = game_state.low_entities + test_entity.low_index;
+				if (test_entity.low->collides)
+				{
+					r32 diameter_width = test_entity.low->width + entity.low->width;
+					r32 diameter_height = test_entity.low->width + entity.low->height;
 
-				TileMapDifference relative_old_player_position = Subtract(tile_map, old_position, test_tile_position);
-				V2 relative_position = relative_old_player_position.delta_xy;
+					V2 min_corner = -0.5f * V2{ diameter_width, diameter_height };
+					V2 max_corner = 0.5f * V2{ diameter_width, diameter_height };
 
-				TestWall(min_corner.x, relative_position.x, relative_position.y, player_delta.x, player_delta.y, min_time, min_corner.y, max_corner.y);
-				TestWall(max_corner.x, relative_position.x, relative_position.y, player_delta.x, player_delta.y, min_time, min_corner.y, max_corner.y);
-				TestWall(min_corner.y, relative_position.y, relative_position.x, player_delta.y, player_delta.x, min_time, min_corner.x, max_corner.x);
-				TestWall(max_corner.y, relative_position.y, relative_position.x, player_delta.y, player_delta.x, min_time, min_corner.x, max_corner.x);
-			}
-			if (tile_x == end_tile_x)
-			{
-				break;
-			}
-			else
-			{
-				tile_x = static_cast<u32>(static_cast<i32>(tile_x) + delta_x);
+					V2 relative_position = entity.high->position - test_entity.high->position;
+
+					if (TestWall(min_corner.x, relative_position.x, relative_position.y, player_delta.x, player_delta.y, min_time, min_corner.y, max_corner.y))
+					{
+						wall_normal = V2{ -1, 0 };
+						hit_high_entity_index = test_high_index;
+					}
+					if (TestWall(max_corner.x, relative_position.x, relative_position.y, player_delta.x, player_delta.y, min_time, min_corner.y, max_corner.y))
+					{
+						wall_normal = V2{ 1, 0 };
+						hit_high_entity_index = test_high_index;
+					}
+					if (TestWall(min_corner.y, relative_position.y, relative_position.x, player_delta.y, player_delta.x, min_time, min_corner.x, max_corner.x))
+					{
+						wall_normal = V2{ 0, -1 };
+						hit_high_entity_index = test_high_index;
+					}
+					if (TestWall(max_corner.y, relative_position.y, relative_position.x, player_delta.y, player_delta.x, min_time, min_corner.x, max_corner.x))
+					{
+						wall_normal = V2{ 0, 1 };
+						hit_high_entity_index = test_high_index;
+					}
+				}
 			}
 		}
-		if (tile_y == end_tile_y)
+
+		entity.high->position += min_time * player_delta;
+		if (hit_high_entity_index)
+		{
+			entity.high->velocity = entity.high->velocity - Inner(entity.high->velocity, wall_normal) * wall_normal;
+			player_delta = desired_position - entity.high->position;
+			player_delta = player_delta - Inner(player_delta, wall_normal) * wall_normal;
+
+			Entity hit_entity = GetHighEntity(game_state, hit_high_entity_index);
+			entity.high->tile_z += static_cast<u32>(static_cast<i32>(entity.high->tile_z) + hit_entity.low->velocity_tile_z);
+		}
+		else
 		{
 			break;
 		}
-		else
-		{
-			tile_y = static_cast<u32>(static_cast<i32>(tile_y) + delta_y);
-		}
+
 	}
 
-	entity.position = Offset(tile_map, old_position, min_time * player_delta);
-#endif
-
-	if (!IsSameTile(old_position, entity.position))
-	{
-		u32 tile_value = GetTileValue(tile_map, entity.position);
-		if (tile_value == 3)
-		{
-			++entity.position.tile_z;
-		}
-		else if (tile_value == 4)
-		{
-			--entity.position.tile_z;
-		}
-	}
-
-	if (entity.velocity.x == 0.f && entity.velocity.y == 0.f)
+	if (entity.high->velocity.x == 0.f && entity.high->velocity.y == 0.f)
 	{
 		//Note: dont set facing when still
 	}
-	else if (AbsoluteValue(entity.velocity.x) > AbsoluteValue(entity.velocity.y))
+	else if (AbsoluteValue(entity.high->velocity.x) > AbsoluteValue(entity.high->velocity.y))
 	{
-		if (entity.velocity.x > 0)
+		if (entity.high->velocity.x > 0)
 		{
-			entity.facing_direction = 0;
+			entity.high->facing_direction = 0;
 		}
 		else
 		{
-			entity.facing_direction = 2;
+			entity.high->facing_direction = 2;
 		}
 	}
-	else if (AbsoluteValue(entity.velocity.x) < AbsoluteValue(entity.velocity.y))
+	else if (AbsoluteValue(entity.high->velocity.x) < AbsoluteValue(entity.high->velocity.y))
 	{
-		if (entity.velocity.y > 0)
+		if (entity.high->velocity.y > 0)
 		{
-			entity.facing_direction = 1;
+			entity.high->facing_direction = 1;
 		}
 		else
 		{
-			entity.facing_direction = 3;
+			entity.high->facing_direction = 3;
+		}
+	}
+
+	entity.low->position = MapIntoTileSpace(world, game_state.camera_position, entity.high->position);
+}
+
+internal_static void SetCamera(GameState& game_state, WorldPosition new_camera_position)
+{
+	World& world = *(game_state.world);
+
+	WorldDifference delta_camera_position = Subtract(world, new_camera_position, game_state.camera_position);
+	game_state.camera_position = new_camera_position;
+
+	i32 tile_span_x = 17 * 3;
+	i32 tile_span_y = 9 * 3;
+	Rectangle camera_in_bounds = RectCenterDim(V2{}, V2{ static_cast<r32>(tile_span_x), static_cast<r32>(tile_span_y) } * world.tile_side_in_meters);
+	V2 entity_offset_for_frame = -delta_camera_position.delta_xy;
+	OffsetAndCheckFrequencyByArea(game_state, entity_offset_for_frame, camera_in_bounds);
+
+	i32 min_tile_x = new_camera_position.tile_x - tile_span_x / 2;
+	i32 min_tile_y = new_camera_position.tile_y - tile_span_y / 2;
+	i32 max_tile_x = new_camera_position.tile_x + tile_span_x / 2;
+	i32 max_tile_y = new_camera_position.tile_y + tile_span_y / 2;
+
+	for (u32 entity_index = 1; entity_index < game_state.low_entity_count; ++entity_index)
+	{
+		LowEntity& low_entity = game_state.low_entities[entity_index];
+		
+		if (low_entity.high_entity_index == 0)
+		{
+			if (low_entity.position.tile_z == new_camera_position.tile_z &&
+				low_entity.position.tile_x >= min_tile_x &&
+				low_entity.position.tile_x <= max_tile_x &&
+				low_entity.position.tile_y >= min_tile_y &&
+				low_entity.position.tile_y <= max_tile_y)
+			{
+				MakeEntityHighFrequency(game_state, entity_index);
+			}
 		}
 	}
 }
@@ -547,15 +654,16 @@ internal_static void MovePlayer(GameState& game_state, Entity& entity, r32 delta
 extern "C"
 ENGINE_API GAME_LOOP(PlatformLoop)
 {
-	u32 tiles_per_width = 17;
-	u32 tiles_per_height = 9;
+	i32 tiles_per_width = 17;
+	i32 tiles_per_height = 9;
 
 	GameState* game_state = reinterpret_cast<GameState*>(memory->permanent_storage);
 	Assert(sizeof(game_state) <= memory->permanent_storage_size);
 	if (!memory->is_initialized)
 	{
 		//null entity index
-		AddEntity(*game_state);
+		AddLowEntity(*game_state, EntityType_Null);
+		game_state->high_entity_count = 1;
 
 		game_state->backdrop = Debug_LoadBMP(thread, memory->Debug_PlatformRead, "test/test_background.bmp");
 
@@ -585,36 +693,21 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 		bitmap->align_x = 74;
 		bitmap->align_y = 198;
 
-		game_state->camera_position.tile_x = 17/2;
-		game_state->camera_position.tile_y = 9/2;
-		//game_state->camera_position.offset_x = .5f;
-		//game_state->camera_position.offset_y = .5f;
-
 		InitializeArena(game_state->world_arena, 
 			memory->permanent_storage_size - sizeof(GameState),
 			static_cast<u8*>(memory->permanent_storage) + sizeof(GameState));
 
 		game_state->world = PushStruct(game_state->world_arena, World);
-		World* world = game_state->world;
-		world->tile_map = PushStruct(game_state->world_arena, TileMap);
+		World& world = *game_state->world;
 
-		TileMap& tile_map = *(world->tile_map);
-		//Note: using 16x16 tile chunks
-		tile_map.chunk_shift = 4;
-		tile_map.chunk_mask = (1 << tile_map.chunk_shift) - 1; //create mask be reverse shift and minus 1
-		tile_map.chunk_dimension = (1 << tile_map.chunk_shift);
+		InitializeTileMap(world, 1.4f);
 
-		tile_map.count_y = 128;
-		tile_map.count_x = 128;
-		tile_map.count_z = 2;
-		tile_map.tile_chunks = PushArray(game_state->world_arena, 
-			tile_map.count_x * tile_map.count_y * tile_map.count_z, 
-			TileChunk);
-
-		tile_map.tile_side_in_meters = 1.4f;
-
-		u32 screen_x = 0;
-		u32 screen_y = 0;
+		i32 screen_base_x = 0;
+		i32 screen_base_y = 0;
+		i32 screen_base_z = 0;
+		i32 screen_x = screen_base_x;
+		i32 screen_y = screen_base_y;
+		i32 abs_tile_z = screen_base_z;
 
 		u32 random_number_index = 0;
 
@@ -625,26 +718,24 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 		b32 door_up = false;
 		b32 door_down = false;
 
-		u32 abs_tile_z = 0;
-
-		for (u32 screen_index = 0; screen_index < 100; ++screen_index)
+		for (u32 screen_index = 0; screen_index < 2; ++screen_index)
 		{
 			Assert(random_number_index < ArrayCount(random_number_table));
 			u32 random_choice;
-			if (door_up || door_down)
-			{
+			/*if (door_up || door_down)
+			{*/
 				random_choice = random_number_table[random_number_index++] % 2;
-			}
+			/*}
 			else
 			{
 				random_choice = random_number_table[random_number_index++] % 3;
-			}
+			}*/
 
 			b32 created_z_door = false;
 			if (random_choice == 2)
 			{
 				created_z_door = true;
-				if (abs_tile_z == 0)
+				if (abs_tile_z == screen_base_z)
 				{
 					door_up = true;
 				}
@@ -662,12 +753,12 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 				door_top = true;
 			}
 
-			for (u32 tile_y = 0; tile_y < tiles_per_height; ++tile_y)
+			for (i32 tile_y = 0; tile_y < tiles_per_height; ++tile_y)
 			{
-				for (u32 tile_x = 0; tile_x < tiles_per_width; ++tile_x)
+				for (i32 tile_x = 0; tile_x < tiles_per_width; ++tile_x)
 				{
-					u32 abs_tile_x = screen_x * tiles_per_width + tile_x;
-					u32 abs_tile_y = screen_y * tiles_per_height + tile_y;
+					i32 abs_tile_x = screen_x * tiles_per_width + tile_x;
+					i32 abs_tile_y = screen_y * tiles_per_height + tile_y;
 
 					u32 tile_value = 1;
 					if (tile_x == 0)
@@ -713,7 +804,10 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 						}
 					}
 
-					SetTileValue(game_state->world_arena, *(world->tile_map), abs_tile_x, abs_tile_y, abs_tile_z, tile_value);
+					if (tile_value == 2)
+					{
+						AddWall(*game_state, abs_tile_x, abs_tile_y, abs_tile_z);
+					}
 				}
 			}
 
@@ -736,13 +830,13 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 
 			if (random_choice == 2)
 			{
-				if (abs_tile_z == 0)
+				if (abs_tile_z == screen_base_z)
 				{
-					abs_tile_z = 1;
+					abs_tile_z = screen_base_z + 1;
 				}
 				else
 				{
-					abs_tile_z = 0;
+					abs_tile_z = screen_base_z;
 				}
 			}
 			else if (random_choice == 1)
@@ -755,15 +849,28 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 			}
 		}
 
+#if 0
+		while (game_state->low_entity_count < ArrayCount(game_state->low_entities) - 16)
+		{
+			i32 coords = 1024 + static_cast<i32>(game_state->low_entity_count);
+			AddWall(*game_state, coords, coords, coords);
+		}
+#endif
+
+		WorldPosition new_camera_position{};
+		new_camera_position.tile_x = screen_base_x + tiles_per_width / 2;
+		new_camera_position.tile_y = screen_base_y + tiles_per_height / 2;
+		new_camera_position.tile_z = screen_base_z;
+		SetCamera(*game_state, new_camera_position);
+
 		memory->is_initialized = true;
 	}
 
 	World& world = *(game_state->world);
-	TileMap& tile_map = *(world.tile_map);
 
 	i32 tile_side_in_pixels = 60;
 	r32 r_tile_side_in_pixels = static_cast<r32>(tile_side_in_pixels);
-	r32 meters_to_pixels = static_cast<r32>(tile_side_in_pixels) / tile_map.tile_side_in_meters;
+	r32 meters_to_pixels = static_cast<r32>(tile_side_in_pixels) / world.tile_side_in_meters;
 
 	r32 lower_left_x = -r_tile_side_in_pixels/2;
 	r32 lower_left_y = static_cast<r32>(buffer.height);
@@ -772,9 +879,19 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 	{
 		const GameControllerInput& controller = input->controllers[controller_index];
 		{
-			Entity* controlling_entity = GetEntity(*game_state, game_state->player_index_for_controller[controller_index]);
-			if (controlling_entity)
+			u32 low_index = game_state->player_index_for_controller[controller_index];
+			if (low_index == 0)
 			{
+				if (controller.start.is_ended_down)
+				{
+					u32 entity_index = AddPlayer(*game_state);
+					game_state->player_index_for_controller[controller_index] = entity_index;
+				}
+			}
+			else
+			{
+				Entity controlling_entity = GetHighEntity(*game_state, low_index);
+
 				V2 player_acceleration{};
 
 				if (controller.is_analog)
@@ -801,43 +918,60 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 						player_acceleration.x = 1.f;
 					}
 				}
-
-				MovePlayer(*game_state, *controlling_entity, input->frame_delta, player_acceleration);
-			}
-			else
-			{
-				if (controller.start.is_ended_down)
+				if (controller.action_up.is_ended_down)
 				{
-					u32 entity_index = AddEntity(*game_state);
-					InitializePlayer(*game_state, entity_index);
-					game_state->player_index_for_controller[controller_index] = entity_index;
+					controlling_entity.high->delta_z = 3.f;
 				}
+
+				MovePlayer(*game_state, controlling_entity, input->frame_delta, player_acceleration);
 			}
 		}
 	}
 
-	Entity* camera_following_entity = GetEntity(*game_state, game_state->camera_follow_entity_index);
-	if (camera_following_entity)
+	Entity camera_following_entity = GetHighEntity(*game_state, game_state->camera_follow_entity_index);
+	if (camera_following_entity.high)
 	{
-		game_state->camera_position.tile_z = camera_following_entity->position.tile_z;
+		WorldPosition new_camera_position = game_state->camera_position;
 
-		TileMapDifference difference = Subtract(tile_map, camera_following_entity->position, game_state->camera_position);
-		if (difference.delta_xy.x > 9.f * tile_map.tile_side_in_meters)
+		new_camera_position.tile_z = camera_following_entity.low->position.tile_z;
+
+#if 1 //no scrolling cam
+		if (camera_following_entity.high->position.x > 9.f * world.tile_side_in_meters)
 		{
-			game_state->camera_position.tile_x += tiles_per_width;
+			new_camera_position.tile_x += tiles_per_width;
 		}
-		else if (difference.delta_xy.x < -9.f * tile_map.tile_side_in_meters)
+		else if (camera_following_entity.high->position.x < -9.f * world.tile_side_in_meters)
 		{
-			game_state->camera_position.tile_x -= tiles_per_width;
+			new_camera_position.tile_x -= tiles_per_width;
 		}
-		if (difference.delta_xy.y > 5.f * tile_map.tile_side_in_meters)
+		if (camera_following_entity.high->position.y > 5.f * world.tile_side_in_meters)
 		{
-			game_state->camera_position.tile_y += tiles_per_height;
+			new_camera_position.tile_y += tiles_per_height;
 		}
-		else if (difference.delta_xy.y < -5.f * tile_map.tile_side_in_meters)
+		else if (camera_following_entity.high->position.y < -5.f * world.tile_side_in_meters)
 		{
-			game_state->camera_position.tile_y -= tiles_per_height;
+			new_camera_position.tile_y -= tiles_per_height;
 		}
+#else	//scrolling cam
+		if (camera_following_entity.high->position.x > 1.f * world.tile_side_in_meters)
+		{
+			new_camera_position.tile_x += 1;
+		}
+		else if (camera_following_entity.high->position.x < -1.f * world.tile_side_in_meters)
+		{
+			new_camera_position.tile_x -= 1;
+		}
+		if (camera_following_entity.high->position.y > 1.f * world.tile_side_in_meters)
+		{
+			new_camera_position.tile_y += 1;
+		}
+		else if (camera_following_entity.high->position.y < -1.f * world.tile_side_in_meters)
+		{
+			new_camera_position.tile_y -= 1;
+		}
+#endif
+
+		SetCamera(*game_state, new_camera_position);
 	}
 
 	DrawBitmap(buffer, game_state->backdrop, 0.f, 0.f);
@@ -845,6 +979,7 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 	r32 screen_center_x = .5f * static_cast<r32>(buffer.width);
 	r32 screen_center_y = .5f * static_cast<r32>(buffer.height);
 
+#if 0
 	for (i32 relative_row = -10; relative_row < 10; ++relative_row)
 	{
 		for (i32 relative_column = -20; relative_column < 20; ++relative_column)
@@ -855,7 +990,7 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 			u32 column = static_cast<u32>(signed_column);
 			u32 row = static_cast<u32>(signed_row);
 
-			u32 tile_id = GetTileValue(tile_map, column, row, game_state->camera_position.tile_z);
+			u32 tile_id = GetTileValue(world, column, row, game_state->camera_position.tile_z);
 
 			if (tile_id > 1)
 			{
@@ -882,27 +1017,44 @@ ENGINE_API GAME_LOOP(PlatformLoop)
 			}
 		}
 	}
+#endif
 
-	Entity* entity = game_state->entities;
-	for (u32 entity_index = 0; entity_index < game_state->entity_count; ++entity_index, ++entity)
+	for (u32 high_index = 0; high_index < game_state->high_entity_count; ++high_index)
 	{
-		if (entity->exists)
-		{
-			TileMapDifference difference = Subtract(tile_map, entity->position, game_state->camera_position);
+			HighEntity& high_entity = game_state->high_entities[high_index];
+			LowEntity& low_entity = game_state->low_entities[high_entity.low_entity_index];
 
-			r32 player_gound_point_x = screen_center_x + meters_to_pixels * difference.delta_xy.x;
-			r32 player_gound_point_y = screen_center_y - meters_to_pixels * difference.delta_xy.y;
+			//high_entity.position += entity_offset_for_frame;
+
+			r32 dt = input->frame_delta;
+			r32 gravity = -9.8f;
+			high_entity.z += 0.5f * gravity * Square(dt) + high_entity.delta_z * dt;
+			high_entity.delta_z += gravity * dt;
+			if (high_entity.z < 0)
+			{
+				high_entity.z = 0;
+			}
+
+			r32 player_gound_point_x = screen_center_x + meters_to_pixels * high_entity.position.x;
+			r32 player_gound_point_y = screen_center_y - meters_to_pixels * high_entity.position.y;
+			r32 z = -meters_to_pixels * high_entity.z;
 			V2 player_left_top{
-				player_gound_point_x - meters_to_pixels * (entity->width * .5f),
-				player_gound_point_y - meters_to_pixels * (entity->height)
+				player_gound_point_x - meters_to_pixels * (low_entity.width * .5f),
+				player_gound_point_y - meters_to_pixels * (low_entity.height * .5f)
 			};
-			V2 player_width_height = { entity->width, entity->height };
-			DrawRectangle(buffer, player_left_top, player_left_top + player_width_height * meters_to_pixels, 1.f, 0.f, 0.f);
+			V2 player_width_height = { low_entity.width, low_entity.height };
 
-			HeroBitmap& hero_bitmap = game_state->hero_bitmaps[entity->facing_direction];
-			DrawBitmap(buffer, hero_bitmap.body, player_gound_point_x, player_gound_point_y, hero_bitmap.align_x, hero_bitmap.align_y);
-			DrawBitmap(buffer, hero_bitmap.head, player_gound_point_x, player_gound_point_y, hero_bitmap.align_x, hero_bitmap.align_y);
-		}
+			if (low_entity.type == EntityType_Hero)
+			{
+				HeroBitmap& hero_bitmap = game_state->hero_bitmaps[high_entity.facing_direction];
+				DrawBitmap(buffer, hero_bitmap.body, player_gound_point_x, player_gound_point_y + z, hero_bitmap.align_x, hero_bitmap.align_y);
+				DrawBitmap(buffer, hero_bitmap.head, player_gound_point_x, player_gound_point_y + z, hero_bitmap.align_x, hero_bitmap.align_y);
+				DrawRectangle(buffer, player_left_top, player_left_top + player_width_height * meters_to_pixels, 1.f, 0.f, 0.f);
+			}
+			else
+			{
+				DrawRectangle(buffer, player_left_top, player_left_top + player_width_height * meters_to_pixels, 1.f, 1.f, 1.f);
+			}
 	}
 
 	//App::Run();

@@ -26,12 +26,22 @@ inline r32 AbsoluteValue(r32 real)
 
 inline u32 RotateLeft(u32 value, i32 amount)
 {
+#if COMPILER_MSVC
 	return _rotl(value, amount);
+#else
+	amount &= 31;
+	return (value << amount) | (value >> (32 - amount));
+#endif
 }
 
 inline u32 RotateRight(u32 value, i32 amount)
 {
+#if COMPILER_MSVC
 	return _rotr(value, amount);
+#else
+	amount &= 31;
+	return (value >> amount) | (value << (32 + amount));
+#endif
 }
 
 inline i32 RoundToI32(r32 real)
@@ -52,6 +62,16 @@ inline i32 TruncateToI32(r32 real)
 inline i32 FloorToI32(r32 real)
 {
 	return static_cast<i32>(floorf(real));
+}
+
+inline i32 CeilToI32(r32 real)
+{
+	return static_cast<i32>(ceilf(real));
+}
+
+inline u32 CeilToU32(r32 real)
+{
+	return static_cast<u32>(ceilf(real));
 }
 
 inline r32 Sin(r32 angle)
@@ -78,7 +98,7 @@ inline BitScanResult FindLeastSignificantSetBit(u32 value)
 {
 	BitScanResult result{};
 
-#if 1 //COMPILER_MSVC
+#if COMPILER_MSVC
 	result.found = _BitScanForward(reinterpret_cast<unsigned long*>(&result.index), static_cast<unsigned long>(value));
 
 #else

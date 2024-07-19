@@ -90,3 +90,42 @@ inline r32 LengthSquared(V2 a)
 {
 	return Inner(a, a);
 }
+
+struct Rectangle
+{
+	V2 min;
+	V2 max;
+};
+
+inline Rectangle RectMinMax(V2 min, V2 max)
+{
+	return { min, max };
+}
+
+inline Rectangle RectMinDim(V2 min, V2 dim)
+{
+	return { min, min + dim };
+}
+
+inline Rectangle RectCenterHalfDim(V2 center, V2 half_dim)
+{
+	return { center - half_dim, center + half_dim };
+}
+
+inline Rectangle RectCenterDim(V2 center, V2 dim)
+{
+	return { center - dim * 0.5f, center + dim * 0.5f };
+}
+
+inline b32 IsInRectangle(Rectangle rect, V2 a)
+{
+	b32 result {	
+		(rect.min.x <= a.x) &&
+		(rect.min.y <= a.y) &&
+		(rect.max.x > a.x) &&
+		(rect.max.y > a.y)
+	};
+
+
+	return result;
+}

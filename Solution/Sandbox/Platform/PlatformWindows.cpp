@@ -969,7 +969,7 @@ int CALLBACK WinMain(HINSTANCE Instance, [[maybe_unused]] HINSTANCE PrevInstance
 			ThreadContext thread {};
 
 			GameMemory memory = {};
-			memory.permanent_storage_size = MegaBytes(64);
+			memory.permanent_storage_size = MegaBytes(256);
 			memory.transient_storage_size = GigaBytes(1);
 			memory.Debug_PlatformRead = PlatformReadDefinition;
 			memory.Debug_PlatformWrite = PlatformWriteDefinition;

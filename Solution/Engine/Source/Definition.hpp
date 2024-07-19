@@ -63,10 +63,12 @@ using MemoryIndex = size_t;
 	#define Assert(Expression) if(!(Expression)) {__debugbreak();}
 	#define Ensure(Expression) ((Expression) || ([] () {__debugbreak();}(), false))
 	#define Halt() __debugbreak()
+	#define InvalidCodePath() Assert(false)
 #else
 	#define Assert(Expression)
 	#define Ensure(Expression) (Expression)
 	#define Halt()
+	#define InvalidCodePath()
 #endif // ENGINE_BUILD_DEBUG
 
 internal_static u32 SafeTruncate32(i64 value)
